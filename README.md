@@ -26,9 +26,18 @@ ChromaCal is a single HTML dashboard that lives in your HA `/www/` folder. It kn
 
 ## 📦 Installation
 
-### 1. Add to Home Assistant
+### Method 1: HACS Custom Repository (Recommended)
 
-Copy `chromacal.html` to your HA `/config/www/` folder:
+1. Open Home Assistant and navigate to **HACS → Frontend**
+2. Click the **three dots** in the top right → **Custom repositories**
+3. Paste: `https://github.com/TheRealApollyon/ChromaCal`
+4. Select **Plugin** as the category → **Add**
+5. Click **Download** on the ChromaCal card that appears
+6. Access at: `http://your-ha-ip:8123/local/chromacal.html`
+
+### Method 2: Manual
+
+Copy `dist/chromacal.html` to your HA `/config/www/` folder:
 
 ```bash
 # Via SCP (adjust path/port)
@@ -39,22 +48,25 @@ Or use the HA File Editor / Studio Code Server.
 
 Access at: `http://your-ha-ip:8123/local/chromacal.html`
 
-### 2. Import the Blueprint
+---
 
-Copy `blueprints/automation/chromacal/chromacal_sync.yaml` to:
-```
-/config/blueprints/automation/chromacal/chromacal_sync.yaml
-```
+### Import the Blueprint
 
-Or import via URL in HA → Settings → Automations & Scenes → Blueprints → Import.
+Click the badge to import the automation engine directly into your Home Assistant:
 
-### 3. First launch
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FTheRealApollyon%2FChromaCal%2Fmain%2Fblueprints%2Fautomation%2Fchromacal%2Fchromacal_sync.yaml)
+
+*Manual fallback:* Copy `blueprints/automation/chromacal/chromacal_sync.yaml` to `/config/blueprints/automation/chromacal/` on your HA instance.
+
+---
+
+### First Launch
 
 1. Open ChromaCal in your browser
 2. Enter your HA URL and a Long-Lived Access Token (Profile → Security)
 3. Add your light entity (auto-detects from HA)
 4. Configure your schedule (start offset, warm white, fade-in duration)
-5. Create a Blueprint automation: Settings → Automations → Create from Blueprint → ChromaCal Sync Engine
+5. Create an automation from the Blueprint: Settings → Automations → Create from Blueprint → ChromaCal Sync Engine
 
 ---
 
@@ -63,22 +75,19 @@ Or import via URL in HA → Settings → Automations & Scenes → Blueprints →
 ### Color Start Offset
 How many minutes **after sunset** ChromaCal waits before firing colors. Set this to match when your existing warm-up automation finishes.
 
-Example: If your "Sunset Fade In" starts 30 min before sunset and takes 45 min total, it finishes at sunset + 15 min. Set offset to **+15** for colors to fire right after, or **+30** for a 15-min warm white buffer.
-
-### Warm-Up Automation Start
-How many minutes **before sunset** your existing warm-up automation starts. This affects only the timeline display — ChromaCal doesn't control the warm-up, your HA automation does.
+Example: If your "Sunset Fade In" starts 30 min before sunset and takes 45 min total, it finishes at sunset + 15 min. Set offset to **+15** for colors right after, or **+30** for a 15-min warm white buffer first.
 
 ### Color Fade-In
 How long the crossfade takes when holiday colors first fire:
 - **30 sec** — quick snap
 - **1 min** — smooth (default)
-- **5 min** — very gradual, barely perceptible transition
+- **5 min** — very gradual, barely perceptible
 - **10 min** — ultra slow melt into color
 
-This is a single Zigbee `transition` parameter — no additional commands needed.
+Single Zigbee `transition` parameter — no additional commands needed.
 
 ### Warm White
-Security lighting before lights-off. Choose your preferred Kelvin:
+Security lighting before lights-off. Configurable Kelvin:
 - 🕯️ Candle (1800K) — very warm amber
 - Warm (2700K) — classic incandescent
 - Neutral (4000K) — clean white (default)
@@ -89,11 +98,11 @@ Security lighting before lights-off. Choose your preferred Kelvin:
 
 ## 🗓️ Calendar Coverage
 
-**US:** Federal holidays, Military observances (including POW/MIA, USMC Birthday), cultural months, awareness months, pride events, religious observances
+**US:** Federal holidays, Military observances (POW/MIA, USMC Birthday, Armed Forces Day), cultural months, awareness months, pride events, religious observances
 
-**International:** Canada, UK, Australia, EU, APAC, Latin America, and global Islamic/Jewish/Hindu/Lunar floating calendar
+**International:** Canada, UK, Australia, EU, APAC, Latin America, global Islamic/Jewish/Hindu/Lunar floating calendar
 
-**All floating dates computed algorithmically** — Easter (Meeus/Jones/Butcher), US nthWeekday holidays, Islamic calendar estimates, Jewish calendar, and more. Verified correct 2024–2030.
+**All floating dates computed algorithmically** — Easter (Meeus/Jones/Butcher), US nthWeekday holidays, Islamic calendar estimates, Jewish calendar. Verified correct 2024–2030.
 
 ---
 
@@ -101,20 +110,20 @@ Security lighting before lights-off. Choose your preferred Kelvin:
 
 ChromaCal publishes its schedule to `input_text.chromacal_[lightname]` in HA's state machine every 30 seconds. The companion Blueprint watches this entity and fires physical light commands — so lights change color even when ChromaCal's browser tab is closed.
 
-**Hardened against HA restarts:** The Blueprint uses `state_attr()` reads (not trigger context) and triggers on `homeassistant: start` and `automation_reloaded` events, so it recovers correctly after any interruption.
+**Hardened against HA restarts:** Uses `state_attr()` reads (not trigger context) and triggers on `homeassistant: start` and `automation_reloaded` events, so it recovers correctly after any interruption.
 
 ---
 
 ## 🚨 Emergency Mode
 
-Activates alternating emergency lighting patterns using Zigbee-safe 3-second intervals:
+Alternating emergency lighting patterns using Zigbee-safe 3-second intervals:
 
 - 🔴🔵 **Red/Blue (US)** — Police/Fire simulation
 - 🔵 **Blue (EU)** — EU emergency standard with pulse
 - 🟡 **Amber** — Roadway/construction
 - 🔴⚪ **Red/White** — Fire truck pattern
 
-Click the button again to cancel and resume schedule.
+Click again to cancel and resume the schedule.
 
 ---
 
@@ -129,7 +138,7 @@ Works with **any HA `light.*` entity** that supports `rgb_color`:
 - Tuya / Local Tuya
 - Shelly RGBW
 
-For color-temp-only lights (no RGB), warm white and the Force White feature work; event colors will be approximated by the bulb.
+For color-temp-only lights (no RGB), warm white and Force White work; event colors will be approximated by the bulb.
 
 ---
 
@@ -158,9 +167,7 @@ ChromaCal stores your HA URL and token in browser `localStorage` only. Nothing i
 
 ## 🤝 Contributing
 
-Issues and PRs welcome at [github.com/TheRealApollyon/chromacal](https://github.com/TheRealApollyon/chromacal)
-
-Use **Settings → Feedback → Report a Bug** in ChromaCal to open a pre-filled GitHub Issue with your version and setup info.
+Issues and PRs welcome. Use **Settings → Feedback → Report a Bug** inside ChromaCal to open a pre-filled GitHub Issue with your version and setup info automatically included.
 
 ---
 
