@@ -1,0 +1,147 @@
+blueprint:
+  name: "ChromaCal Sync Engine v1.0"
+  description: >
+    Server-side companion for ChromaCal — the Home Assistant holiday lighting dashboard.
+
+    ChromaCal publishes its live schedule state to a virtual HA entity (input_text.chromacal_*)
+    every 30 seconds. This Blueprint watches that entity and executes physical light commands —
+    so your lights change color automatically even when ChromaCal's browser tab is closed.
+
+    Hardened against HA restarts and automation reloads: uses state_attr() reads on the
+    current entity state rather than relying on trigger context, so it recovers correctly
+    after any kind of HA interruption.
+
+    Setup:
+      1. Open ChromaCal → Settings → Diagnostics → note your "Bridge Entity" name
+         (format: input_text.chromacal_[your_light_name])
+      2. Import this Blueprint (Settings → Automations & Scenes → Blueprints → Import)
+      3. Click "Create Automation", select the bridge entity and your target light
+      4. Save — done forever. No other automations needed.
+
+    GitHub: https://github.com/TheRealApollyon/chromacal
+
+  domain: automation
+  author: TheRealApollyon
+  homeassistant:
+    min_version: "2023.1.0"
+
+  input:
+    chromacal_bridge:
+      name: "ChromaCal Bridge Entity"
+      description: >
+        The virtual state entity ChromaCal writes to.
+        Find the exact name in ChromaCal → Settings → Diagnostics → Pub/Sub Bridge Entities.
+        Format: input_text.chromacal_[your_light_name]
+      selector:
+        entity:
+
+    target_light:
+      name: "Target Light"
+      description: "The physical light or light group to control."
+      selector:
+        target:
+          entity:
+            domain: light
+
+    enable_warm_white:
+      name: "Enable Warm White Phase"
+      description: >
+        When ChromaCal signals warm white (22:00 safety curfew), automatically switch
+        to warm white. Disable if you handle this with a separate automation.
+      default: true
+      selector:
+        boolean:
+
+    enable_lights_off:
+      name: "Enable Lights Off"
+      description: >
+        When ChromaCal signals lights off, automatically turn off the light.
+        Disable if you use a separate off automation.
+      default: true
+      selector:
+        boolean:
+
+# restart: if rapid successive changes come in, cancel previous run and start fresh.
+# max_exceeded: silent: don't spam HA logs when this happens.
+mode: restart
+max_exceeded: silent
+
+trigger:
+  # Primary trigger: ChromaCal published a state change
+  - platform: state
+    entity_id: !input chromacal_bridge
+    id: state_change
+
+  # Hardened recovery triggers: re-read current state after any interruption
+  # Uses state_attr() reads instead of trigger.to_state so it works even
+  # when there's no triggering event — just a fresh read of what ChromaCal last published
+  - platform: homeassistant
+    event: start
+    id: ha_start
+
+  - platform: event
+    event_type: automation_reloaded
+    id: reload
+
+# Read directly from entity state (not trigger context) — works for all three trigger types
+variables:
+  helper:       !input chromacal_bridge
+  phase:        "{{ state_attr(helper, 'phase') | default('idle') }}"
+  rgb:          "{{ state_attr(helper, 'rgb_color') | default(none) }}"
+  col_temp:     "{{ state_attr(helper, 'color_temp') | default(none) }}"
+  brightness:   "{{ state_attr(helper, 'brightness') | default(255) | int }}"
+  transition:   "{{ state_attr(helper, 'transition') | default(30) | int }}"
+  event_name:   "{{ state_attr(helper, 'event_name') | default('') }}"
+  do_ww:        !input enable_warm_white
+  do_off:       !input enable_lights_off
+
+action:
+  # Small delay on startup/reload triggers so HA finishes initializing
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id in ['ha_start', 'reload'] }}"
+    then:
+      - delay: "00:00:05"
+
+  - choose:
+      # ── HOLIDAY / AWARENESS COLOR WINDOW ──────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'color_window' and rgb is not none }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+            data:
+              rgb_color: "{{ rgb }}"
+              brightness: "{{ brightness }}"
+              transition: "{{ transition }}"
+
+      # ── WARM WHITE (22:00 safety curfew) ─────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'warmwhite' and do_ww }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+            data:
+              # Use color_temp from bridge if set, otherwise 2700K (370 mireds)
+              color_temp: "{{ col_temp if col_temp is not none else 370 }}"
+              brightness: "{{ brightness }}"
+              transition: "{{ transition }}"
+
+      # ── LIGHTS OFF ────────────────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'off' and do_off }}"
+        sequence:
+          - service: light.turn_off
+            target: !input target_light
+            data:
+              transition: "{{ transition }}"
+
+      # ── IDLE (pre-sunset, warm-up window) — do nothing ───────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'idle' }}"
+        sequence:
+          - stop: "ChromaCal idle phase — no light action needed"
