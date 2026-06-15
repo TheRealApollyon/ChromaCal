@@ -1,105 +1,171 @@
-# Burden of Survival
+# ChromaCal 🎨
 
-**A hyper-realistic open-world zombie survival simulation built in Unreal Engine 5.**
+**Automated holiday lighting for Home Assistant. One file. No YAML config. No integrations.**
 
-> *"Survive in YOUR city. Your street. Your home."*
+ChromaCal is a single HTML dashboard that lives in your HA `/www/` folder. It knows about 130+ holidays, awareness months, and cultural observances across US, Canada, UK, Australia, EU, and globally — and automatically cycles your lights through the right colors every night, year after year, without maintenance.
 
----
-
-## What This Game Is
-
-Burden of Survival is not another zombie game. It is a simulation of what surviving an outbreak would actually feel like -- physically, psychologically, and socially -- set in the real world using real geography.
-
-You do not select a fictional map. You drop a pin. You survive where you live, where you grew up, or where you've always wanted to go. The streets are real. The population density is real. The zombie count is derived from the actual pre-outbreak population of the area you chose.
-
-There are no health bars. No stamina meters. No XP counters. Your character tells you how they feel. You listen. You survive.
+> *"The whole world celebrates with light. Now you can too."*
 
 ---
 
-## Core Design Philosophy
+## ✨ What it does
 
-**Diegetic Everything.** Every piece of information about your character's physical and psychological state is communicated through the character -- voice, animation, behavior. The screen is clean. The world communicates.
-
-**The Body Keeps Score.** Physical fatigue accumulates realistically. You cannot chop wood all day and wake up fine. Muscle soreness is modeled. Sleep quality matters. Adrenaline carries a debt. Military training raises the ceiling. The ceiling still exists.
-
-**Psychological Weight is Real.** The cost of hard decisions does not reset. Killing someone -- even when necessary -- leaves a mark. Losing a companion leaves a mark. Witnessing something terrible and not acting leaves a mark. These accumulate and express through behavior, voice, and what the character can and cannot do.
-
-**The World Before Mattered.** Your character had a life. A profession. A family or not. A reputation. A Tuesday morning routine. The game begins in that Tuesday morning and the loss of it is real because the game let you inhabit it first.
-
-**Humans Are More Dangerous Than Zombies -- But Zombies Are The Game.** The social simulation is deep and honest. Pre-existing biases, community dynamics, reputation, information as a weapon -- all of it is modeled. But the zombie survival experience is the foundation. Everything else is built on top of it.
-
-**The World Is Finite.** The zombie population is derived from the real population of the selected area. Every zombie killed is permanently gone. The world can actually be won -- slowly, collectively, over time.
-
----
-
-## The Scale System
-
-The game scales in five rungs, each a complete experience that builds into the next:
-
-| Rung | Scope | Players | Zombie Count |
-|------|-------|---------|--------------|
-| 1 | Hometown | Solo | Real local population |
-| 2 | County | Co-op 2-4 | Real county population |
-| 3 | State | Multiplayer | Real state population |
-| 4 | United States | MMO Scale | ~335 million |
-| 5 | World | Global | ~8 billion |
+- **Zero maintenance** — Easter, Thanksgiving, Mardi Gras, Islamic dates, Jewish holidays, all computed algorithmically forever
+- **130+ events** — Federal, Military, Cultural, Heritage, Pride, Awareness, Religious, Personal categories
+- **Split-night scheduling** — Multiple June awareness months (Pride, Men's Health, Caribbean Heritage) automatically split the color window equally
+- **Pub/Sub bridge** — Companion Blueprint keeps lights running server-side even when the browser is closed
+- **Tonight's Schedule** — Full visual timeline with countdown, phase list, feature toggles
+- **Quick Controls** — Test colors, Color Override, Force White (with Kelvin picker), Emergency Mode (US/EU/Amber/Red-White)
+- **Skip system** — Permanent skip (⊘) or Skip Tonight only (🌙, auto-resets at midnight)
+- **Tonight's Pick** — Force one event to own the full window (⭐)
+- **Warm White** — Security lighting at a configurable Kelvin (2700K → 6500K) before lights-off
+- **Fade-In control** — 30s to 10min crossfade when colors fire
+- **5 themes** — Daylight, Twilight (Catppuccin Mocha), Sci-Fi, Mono, Custom
 
 ---
 
-## Current Development Status
+## 📦 Installation
 
-**Phase:** Pre-production / Foundation  
-**Engine:** Unreal Engine 5  
-**Developer:** TheRealApollyon  
-**Target for Release .5:** Playable prototype on real property with zombie simulation  
-**Target for Release 1.0:** Full Rung 1 Early Access
+### 1. Add to Home Assistant
 
-See [ROADMAP.md](ROADMAP.md) for detailed development timeline.  
-See [Docs/GDD/](Docs/GDD/) for full design documentation.
+Copy `chromacal.html` to your HA `/config/www/` folder:
 
----
+```bash
+# Via SCP (adjust path/port)
+scp -P 22 chromacal.html user@ha-host:/config/www/chromacal.html
+```
 
-## Key Systems
+Or use the HA File Editor / Studio Code Server.
 
-- **Real-World Geography Pipeline** -- OpenStreetMap + Cesium for Unreal generates any location on Earth
-- **Acoustic Herd Simulation** -- Zombie hordes form organically through sound propagation, not scripted triggers
-- **Physical Simulation** -- Fatigue, soreness, injury, adrenaline, and recovery modeled honestly
-- **Psychological Weight System** -- Trauma, grief, and resilience tracked and expressed diegetically
-- **Fight/Flight/Freeze Response** -- First encounters produce realistic neurological responses, not instant action
-- **Social Simulation** -- NPC trust, reputation, cultural background, and pre-existing relationships all modeled
-- **The Notebook** -- Player-driven memory system replacing all traditional quest/log UI
-- **Pass the Torch** -- Persistent world timeline continues after death; find your previous character's base
+Access at: `http://your-ha-ip:8123/local/chromacal.html`
 
----
+### 2. Import the Blueprint
 
-## Design Documents
+Copy `blueprints/automation/chromacal/chromacal_sync.yaml` to:
+```
+/config/blueprints/automation/chromacal/chromacal_sync.yaml
+```
 
-| Document | Description |
-|----------|-------------|
-| [Core Philosophy](Docs/GDD/00_Core_Philosophy.md) | Design principles and emotional targets |
-| [World and Setting](Docs/GDD/01_World_Setting.md) | Geography, scale, lore |
-| [Player Character](Docs/GDD/02_Player_Character.md) | Identity discovery, backgrounds, daily life simulation |
-| [Survival Systems](Docs/GDD/03_Survival_Systems.md) | Physical simulation, fatigue, medical, needs |
-| [Zombie Systems](Docs/GDD/04_Zombie_Systems.md) | AI, acoustic behavior, finite population |
-| [NPC and Social Systems](Docs/GDD/05_NPC_Social_Systems.md) | Trust, reputation, community dynamics, bias |
-| [Psychological Systems](Docs/GDD/06_Psychological_Systems.md) | Weight, trauma, the notebook, internal voice |
-| [Geographic Pipeline](Docs/GDD/07_Geographic_Pipeline.md) | OSM, Cesium, procedural generation |
-| [Progression and Scale](Docs/GDD/08_Progression_Scale.md) | The five rungs, endgame, Pass the Torch |
+Or import via URL in HA → Settings → Automations & Scenes → Blueprints → Import.
+
+### 3. First launch
+
+1. Open ChromaCal in your browser
+2. Enter your HA URL and a Long-Lived Access Token (Profile → Security)
+3. Add your light entity (auto-detects from HA)
+4. Configure your schedule (start offset, warm white, fade-in duration)
+5. Create a Blueprint automation: Settings → Automations → Create from Blueprint → ChromaCal Sync Engine
 
 ---
 
-## Development Philosophy
+## ⚙️ Light Configuration
 
-This game is being built system by system, with each system tested and stable before integration. The first playable milestone is a single property in Ward/Cabot, Arkansas -- real geography, real scale, a handful of zombies, and the core survival loop. Everything else is built on that foundation.
+### Color Start Offset
+How many minutes **after sunset** ChromaCal waits before firing colors. Set this to match when your existing warm-up automation finishes.
 
-Scope is the enemy. Depth is the goal.
+Example: If your "Sunset Fade In" starts 30 min before sunset and takes 45 min total, it finishes at sunset + 15 min. Set offset to **+15** for colors to fire right after, or **+30** for a 15-min warm white buffer.
+
+### Warm-Up Automation Start
+How many minutes **before sunset** your existing warm-up automation starts. This affects only the timeline display — ChromaCal doesn't control the warm-up, your HA automation does.
+
+### Color Fade-In
+How long the crossfade takes when holiday colors first fire:
+- **30 sec** — quick snap
+- **1 min** — smooth (default)
+- **5 min** — very gradual, barely perceptible transition
+- **10 min** — ultra slow melt into color
+
+This is a single Zigbee `transition` parameter — no additional commands needed.
+
+### Warm White
+Security lighting before lights-off. Choose your preferred Kelvin:
+- 🕯️ Candle (1800K) — very warm amber
+- Warm (2700K) — classic incandescent
+- Neutral (4000K) — clean white (default)
+- Daylight (5000K) — bright
+- ✨ Jesus Lights (6500K) — max white-blue intensity
 
 ---
 
-## Contact
+## 🗓️ Calendar Coverage
 
-GitHub: [@TheRealApollyon](https://github.com/TheRealApollyon)
+**US:** Federal holidays, Military observances (including POW/MIA, USMC Birthday), cultural months, awareness months, pride events, religious observances
+
+**International:** Canada, UK, Australia, EU, APAC, Latin America, and global Islamic/Jewish/Hindu/Lunar floating calendar
+
+**All floating dates computed algorithmically** — Easter (Meeus/Jones/Butcher), US nthWeekday holidays, Islamic calendar estimates, Jewish calendar, and more. Verified correct 2024–2030.
 
 ---
 
-*Built in Unreal Engine 5. Real world. Real weight.*
+## 🔗 The Bridge (Blueprint)
+
+ChromaCal publishes its schedule to `input_text.chromacal_[lightname]` in HA's state machine every 30 seconds. The companion Blueprint watches this entity and fires physical light commands — so lights change color even when ChromaCal's browser tab is closed.
+
+**Hardened against HA restarts:** The Blueprint uses `state_attr()` reads (not trigger context) and triggers on `homeassistant: start` and `automation_reloaded` events, so it recovers correctly after any interruption.
+
+---
+
+## 🚨 Emergency Mode
+
+Activates alternating emergency lighting patterns using Zigbee-safe 3-second intervals:
+
+- 🔴🔵 **Red/Blue (US)** — Police/Fire simulation
+- 🔵 **Blue (EU)** — EU emergency standard with pulse
+- 🟡 **Amber** — Roadway/construction
+- 🔴⚪ **Red/White** — Fire truck pattern
+
+Click the button again to cancel and resume schedule.
+
+---
+
+## 🛠️ Compatibility
+
+Works with **any HA `light.*` entity** that supports `rgb_color`:
+- Zigbee via ZHA (Innr, IKEA, Sengled, etc.)
+- Philips Hue (local API)
+- LIFX
+- Z-Wave color bulbs
+- ESPHome RGBW
+- Tuya / Local Tuya
+- Shelly RGBW
+
+For color-temp-only lights (no RGB), warm white and the Force White feature work; event colors will be approximated by the bulb.
+
+---
+
+## 📋 File Structure
+
+```
+chromacal/
+├── README.md
+├── hacs.json
+├── LICENSE
+├── dist/
+│   └── chromacal.html          ← the entire app
+└── blueprints/
+    └── automation/
+        └── chromacal/
+            └── chromacal_sync.yaml
+```
+
+---
+
+## 🔒 Privacy
+
+ChromaCal stores your HA URL and token in browser `localStorage` only. Nothing is sent anywhere except directly to your own Home Assistant instance. No cloud, no analytics, no ads.
+
+---
+
+## 🤝 Contributing
+
+Issues and PRs welcome at [github.com/TheRealApollyon/chromacal](https://github.com/TheRealApollyon/chromacal)
+
+Use **Settings → Feedback → Report a Bug** in ChromaCal to open a pre-filled GitHub Issue with your version and setup info.
+
+---
+
+## 📄 License
+
+MIT — do whatever you want, attribution appreciated.
+
+*ChromaCal v1.0.0 — Honor your heritage. Light your home.*
