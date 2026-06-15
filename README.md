@@ -1,4 +1,4 @@
-# ChromaCal 🎨
+# ChromaCal
 
 **Automated holiday lighting for Home Assistant. One file. No YAML config. No integrations.**
 
