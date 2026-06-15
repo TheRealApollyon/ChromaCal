@@ -983,6 +983,9 @@ header {
 .ev-badge.pride    { background: rgba(204,68,255,.15); color:#DA80FF; border-color:rgba(204,68,255,.25);}
 .ev-badge.religious{ background: rgba(232,184,75,.15); color:#F0C840; border-color:rgba(232,184,75,.25);}
 .ev-badge.personal { background: rgba(204,51,119,.15); color:#E07AB4; border-color:rgba(204,51,119,.25);}
+.ev-badge.tribute  { background: rgba(60,59,110,.25);  color:#9090E8; border-color:rgba(60,59,110,.45);}   /* navy — solemn */
+.ev-badge.memorial { background: rgba(160,90,0,.18);   color:#D4A040; border-color:rgba(160,90,0,.35);}    /* amber — candlelight */
+.ev-badge.celebration { background: rgba(255,69,0,.15); color:#FF8C69; border-color:rgba(255,69,0,.25);}   /* orange — festive */
 .ev-badge.default  { background: rgba(74,96,128,.15);  color:var(--text2); border-color:rgba(74,96,128,.3); }
 .ev-skip-btn {
   width: 28px; height: 28px; border-radius: 6px; border: 1.5px solid var(--border);
@@ -1764,6 +1767,12 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
           <span class="qc-icon">⏹️</span>Turn Off Now
         </button>
       </div>
+
+      <!-- 21 Gun Salute — Military Tribute quick action -->
+      <button class="qc-btn" id="btn-salute" onclick="fire21GunSalute()" style="width:100%;margin-bottom:12px;border-color:rgba(60,59,110,.6);color:var(--text2)" title="Fire 3 volleys of 7 white flashes, then resume the schedule — a 21-gun salute in light">
+        <span class="qc-icon">🎖️</span>21 Gun Salute <span style="font-size:10px;color:var(--muted);margin-left:4px">· 3 volleys × 7 · white flash</span>
+      </button>
+
       <div class="card-label" style="margin-top:8px">▸ Emergency</div>
       <button class="emg-big" id="emg-btn" onclick="toggleEmergency()">
         🚨 EMERGENCY MODE
@@ -1989,6 +1998,15 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
   <div class="modal">
     <div class="modal-title">ADD PERSONAL EVENT</div>
     <div class="field"><label>Event Name</label><input type="text" id="pe-name" placeholder="My Birthday"></div>
+    <div class="field">
+      <label>Event Type</label>
+      <select id="pe-type" onchange="onPeTypeChange(this.value)" style="font-family:var(--fm)">
+        <option value="personal">🎂 Birthday / Anniversary</option>
+        <option value="celebration">🎉 Celebration</option>
+        <option value="tribute">🎖️ Military Tribute — Honor a Veteran</option>
+        <option value="memorial">🕯️ Memorial — Candlelight Remembrance</option>
+      </select>
+    </div>
     <div class="light-config-row">
       <div class="field">
         <label>Month</label>
@@ -2008,6 +2026,7 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
     </div>
     <div class="field">
       <label>Color(s) — click to add</label>
+      <div id="pe-type-hint" style="font-size:11px;color:var(--muted);margin-bottom:6px;display:none"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="pe-colors-row">
         <input type="color" id="pe-color-picker" value="#FF69B4" style="width:40px;height:32px;cursor:pointer">
         <button class="btn btn-ghost btn-sm" onclick="addPeColor()">+ Add Color</button>
@@ -2943,7 +2962,12 @@ function getNightSegments(now, light) {
   if (!awares.length) {
     // Personal event?
     const personal = CFG.personalEvents?.find(e => parseInt(e.month)===m && parseInt(e.day)===d && !skipped.includes(e.name));
-    if (personal) return [{ event:{name:personal.name,colors:personal.colors,type:'personal',icon:'🎂'}, startH:colorStartH, endH:colorEndH }];
+    if (personal) {
+      const peIcons = { tribute:'🎖️', memorial:'🕯️', celebration:'🎉', personal:'🎂' };
+      const peIcon  = peIcons[personal.eventType] || '🎂';
+      const peType  = personal.eventType || 'personal';
+      return [{ event:{name:personal.name,colors:personal.colors,type:peType,icon:peIcon}, startH:colorStartH, endH:colorEndH }];
+    }
     return [{ event:{name:'Default',colors:['#FFC97A'],type:'default',icon:'💡'}, startH:colorStartH, endH:colorEndH }];
   }
 
@@ -2985,9 +3009,11 @@ function getUpcomingEvents(now, days=45) {
   const events = [];
   const holidays = getEnabledHolidays();
   // Add personal events too
+  const peIcons = { tribute:'🎖️', memorial:'🕯️', celebration:'🎉', personal:'🎂' };
   const allEvents = [...holidays, ...(CFG.personalEvents||[]).map(pe => ({
     m: parseInt(pe.month), d1: parseInt(pe.day), d2: parseInt(pe.day),
-    name: pe.name, cat:'personal', type:'personal', icon:'🎂', colors: pe.colors
+    name: pe.name, cat:'personal', type: pe.eventType || 'personal',
+    icon: peIcons[pe.eventType] || '🎂', colors: pe.colors
   }))];
   for (let i = 0; i <= days; i++) {
     const d = new Date(now); d.setDate(d.getDate()+i);
@@ -3759,8 +3785,13 @@ function toggleTonightSkip(name) {
 function toggleSkipEvent(name) {
   if (!CFG.skippedEvents) CFG.skippedEvents = [];
   const idx = CFG.skippedEvents.indexOf(name);
-  if (idx >= 0) CFG.skippedEvents.splice(idx, 1);
-  else CFG.skippedEvents.push(name);
+  if (idx >= 0) {
+    CFG.skippedEvents.splice(idx, 1);
+    addLog('✅ Restored: ' + name, 'ok');
+  } else {
+    CFG.skippedEvents.push(name);
+    addLog('⊘ Skipped: ' + name, 'warn');
+  }
   saveConfig();
   renderUpcoming(new Date());
   update();
@@ -3793,13 +3824,21 @@ function renderUpcoming(now) {
   const rows = events.map(ev => {
     const dateStr   = ev.isToday ? 'TODAY' : ev.date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
     const chips     = (ev.colors||[]).slice(0,5).map(c => '<div class="ev-chip" style="background:' + c + '"></div>').join('');
-    const isSkipped = isEventSkipped(ev.name);
-  const isTonightOnly = tonightOnly.includes(ev.name) && !skipped.includes(ev.name);
+
+    // ── SKIP STATE — keep permanent and tonight-only SEPARATE ─────────────────
+    // isPermSkip  : event is permanently off until manually re-enabled (⊘ button)
+    // isTonightSk : event is skipped for tonight only, resets at midnight (🌙 button)
+    // isSkipped   : either is true — used ONLY for row opacity/fading
+    const isPermSkip  = skipped.includes(ev.name);
+    const isTonightSk = ev.isToday && tonightOnly.includes(ev.name);
+    const isSkipped   = isPermSkip || isTonightSk;
+
     const safeName  = ev.name.replace(/"/g, '&quot;');
     const rowCls    = 'ev-row' + (ev.isToday ? ' today' : '') + (isSkipped ? ' skipped' : '');
-    const btnCls    = 'ev-skip-btn' + (isSkipped ? ' skipped' : '');
+    // ○/⊘ button tracks ONLY the permanent skip, never the tonight-only skip
+    const skipBtnCls = 'ev-skip-btn' + (isPermSkip ? ' skipped' : '');
 
-    // Running badge for TODAY events
+    // Running badge for TODAY events (not shown when either type of skip is active)
     let statusBadge = '';
     if (ev.isToday && !isSkipped) {
       if (ev.name === runningName) {
@@ -3813,26 +3852,30 @@ function renderUpcoming(now) {
       }
     }
 
-    // Tonight's Pick (today only) + Moon skip (all events)
-    // For today events: moon = skip tonight only (resets tomorrow)
-    // For future events: moon = permanent skip for that event
     let pickBtn = '';
+
+    // ★ Tonight's Pick — today only, not when either skip type is active
     if (ev.isToday && !isSkipped && light) {
       const isPicked = tonightPick === ev.name;
-      const pickAttr = 'data-pickname="' + safeName + '"';
-      pickBtn = '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" ' + pickAttr + ' onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
+      pickBtn = '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" data-pickname="' + safeName + '" onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
         + (isPicked ? '\u2605' : '\u2606') + '</button>';
     }
-    // Moon button: all non-permanently-skipped events get it
-    if (!isSkipped) {
-      const isTonightSk = ev.isToday && tonightOnly.includes(ev.name);
-      const moonTitle = ev.isToday
-        ? (isTonightSk ? 'Skipped tonight — click to restore' : 'Skip tonight only (auto-resets tomorrow)')
-        : 'Permanently skip this event';
-      const moonOnClick = ev.isToday ? 'tonightSkipBtnClick(this)' : 'skipBtnClick(this)';
-      pickBtn += '<button class="ev-tonight-skip' + (isTonightSk?' active':'') + '" data-evname="' + safeName + '" onclick="' + moonOnClick + '" title="' + moonTitle + '">'
+
+    // 🌙 Tonight-only skip — TODAY events only, not if permanently skipped
+    // Stays visible even when tonight-skipped so user can toggle it back off
+    if (ev.isToday && !isPermSkip) {
+      const moonTitle = isTonightSk
+        ? 'Skipped tonight — click to restore'
+        : 'Skip for tonight only (auto-resets at midnight)';
+      pickBtn += '<button class="ev-tonight-skip' + (isTonightSk ? ' active' : '') + '" data-evname="' + safeName + '" onclick="tonightSkipBtnClick(this)" title="' + moonTitle + '">'
         + '\uD83C\uDF19</button>';
     }
+    // Future events: no 🌙 button — "tonight" has no meaning for a date that isn't today
+
+    // ○/⊘ Permanent skip — always visible; state/title based on isPermSkip only
+    const skipTitle = isPermSkip
+      ? 'Re-enable — lights will run for this event again'
+      : (ev.isToday ? 'Permanently skip this event — use 🌙 to skip tonight only' : 'Permanently skip this event');
 
     return '<div class="' + rowCls + '">'
       + '<div class="ev-date">' + dateStr + '</div>'
@@ -3843,14 +3886,15 @@ function renderUpcoming(now) {
         const typeLabels = {
           holiday:'Holiday', awareness:'Awareness', vigil:'Vigil', sacred:'Sacred',
           cultural:'Cultural', federal:'Federal', military:'Military', heritage:'Heritage',
-          pride:'Pride', religious:'Religious', personal:'Personal', default:'Default'
+          pride:'Pride', religious:'Religious', personal:'Personal', tribute:'Tribute',
+          memorial:'Memorial', celebration:'Celebration', default:'Default'
         };
         const label = typeLabels[ev.type] || (ev.type ? ev.type.charAt(0).toUpperCase()+ev.type.slice(1) : 'Event');
         return '<div class="ev-badge ' + ev.type + '">' + label + '</div>';
       })()
       + (pickBtn || '')
-      + '<button class="' + btnCls + '" data-evname="' + safeName + '" onclick="skipBtnClick(this)" title="' + (isSkipped ? 'Re-enable (was permanently skipped)' : 'Permanently skip — use 🌙 for tonight only') + '">'
-      + (isSkipped ? '&#8856;' : '&#9675;') + '</button>'
+      + '<button class="' + skipBtnCls + '" data-evname="' + safeName + '" onclick="skipBtnClick(this)" title="' + skipTitle + '">'
+      + (isPermSkip ? '&#8856;' : '&#9675;') + '</button>'
       + '</div>';
   });
   document.getElementById('upcoming-list').innerHTML = rows.join('') || '<div style="color:var(--muted);font-size:12px;padding:10px;text-align:center">No events in the next 45 days for your selected categories</div>';
@@ -4091,6 +4135,47 @@ async function forceLightsOff() {
     addLog(`⏹ ${light.name} turned off`, 'ok');
   } catch(e) { addLog(`Turn off failed: ${e.message}`, 'err'); }
 }
+
+// ── 21 GUN SALUTE ─────────────────────────────────────────────────────────────
+// 3 volleys × 7 white flashes each = 21 total. 1s on, 1s off within a volley.
+// 3s pause between volleys. After all 21, resume the schedule.
+// Volley pattern: flash-flash-flash-flash-flash-flash-flash ... pause ... repeat × 3
+async function fire21GunSalute() {
+  const light = CFG.lights[activeLightIdx];
+  if (!light) { addLog('No light configured', 'warn'); return; }
+
+  const btn = document.getElementById('btn-salute');
+  if (btn) { btn.textContent = '🎖️ Salute in progress...'; btn.disabled = true; }
+  addLog('🎖️ 21 Gun Salute: commencing — 3 volleys × 7', 'info');
+
+  const flash = async () => {
+    try { await lightOn(light.entity, { color_temp: 370, brightness_pct: 100, transition: 0 }); } catch(_) {}
+    await new Promise(r => setTimeout(r, 800));
+    try { await lightOff(light.entity, { transition: 0 }); } catch(_) {}
+    await new Promise(r => setTimeout(r, 500));
+  };
+
+  try {
+    for (let volley = 1; volley <= 3; volley++) {
+      addLog(`  Volley ${volley}/3 — 7 rounds`, 'info');
+      for (let shot = 1; shot <= 7; shot++) {
+        await flash();
+      }
+      if (volley < 3) {
+        // 3-second pause between volleys — dim red glow to simulate smoke/heat
+        try { await lightOn(light.entity, { rgb_color: [30, 0, 0], brightness_pct: 15, transition: 1 }); } catch(_) {}
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+    addLog('🎖️ 21 Gun Salute complete — resuming schedule', 'ok');
+  } catch(e) {
+    addLog(`Salute interrupted: ${e.message}`, 'warn');
+  } finally {
+    if (btn) { btn.textContent = '🎖️ 21 Gun Salute · 3 volleys × 7 · white flash'; btn.disabled = false; }
+    // Resume normal schedule
+    update();
+  }
+}
 function promptOverride() { openModal('modal-override'); }
 async function applyOverride() {
   const light = CFG.lights[activeLightIdx];
@@ -4238,6 +4323,9 @@ function closeSettings() {
   document.getElementById('settings-tab').classList.remove('open');
   document.querySelector('.grid').style.display = '';
   renderLightTabs();
+  // Force-refresh the upcoming list — skip state changes made in settings
+  // need to be reflected in the main view on return.
+  renderUpcoming(new Date());
 }
 
 function renderSettingsTab() {
@@ -4405,6 +4493,7 @@ function renderSettingsTab() {
           + '</div>';
       }).join('') || '<div style="font-size:12px;color:var(--muted);padding:6px 0">Add a light in settings to see bridge entities</div>'}
       </div>
+      <button id="sync-now-btn" class="btn btn-sm" style="width:100%;margin:14px 0 6px;border:1.5px solid var(--cyan);color:var(--cyan);background:rgba(0,200,232,.08);letter-spacing:.5px;font-size:12px;padding:10px 16px;font-weight:600;border-radius:8px" onclick="forceSyncAllBridges()">🔗 Sync Now — push current state to all bridge entities</button>
       <div class="sett-h" style="margin-top:14px">🔔 Notification Service</div>
       <div class="sett-sub">Used by Verify Off alerts. Enter your HA notify service name (e.g. <code>mobile_app_my_phone</code>). Leave blank to use persistent notifications inside HA.</div>
       <div class="field" style="margin-top:10px">
@@ -4418,7 +4507,7 @@ function renderSettingsTab() {
         <span style="font-size:12px;color:var(--muted)" id="s-log-count">${logItems.length} events</span>
         <button class="wz-small-btn" onclick="logItems=[];renderLog();renderSettingsTab()">Clear log</button>
       </div>
-      <div id="s-log-list" class="log-list" style="max-height:220px;overflow-y:auto"></div>
+      <div id="s-log-list" class="log-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px"></div>
     </div>
 
   </div>`;
@@ -4453,6 +4542,12 @@ function renderSettingsTab() {
     }
     skipList.innerHTML = html || '<div style="color:var(--muted);font-size:12px;padding:8px">Enable some categories first</div>';
   }
+
+  // ── CRITICAL: populate the log div immediately after innerHTML is set ──────
+  // renderSettingsTab() creates #s-log-list in the DOM via innerHTML but never
+  // fills it. renderLog() only fires on addLog() calls, so the div stays empty
+  // until the next event. This call backfills existing logItems right now.
+  renderLog();
 }
 
 function renderSettingsIntensity() {
@@ -4689,19 +4784,48 @@ function removePeColor(idx) {
   renderPeChips();
 }
 function savePersonalEvent() {
-  const name  = document.getElementById('pe-name').value.trim();
-  const month = document.getElementById('pe-month').value;
-  const day   = document.getElementById('pe-day').value;
-  const repeat= document.getElementById('pe-repeat').checked;
+  const name      = document.getElementById('pe-name').value.trim();
+  const month     = document.getElementById('pe-month').value;
+  const day       = document.getElementById('pe-day').value;
+  const repeat    = document.getElementById('pe-repeat').checked;
+  const eventType = document.getElementById('pe-type')?.value || 'personal';
   if (!name || !day) { alert('Name and day are required.'); return; }
   if (selectedPeColors.length === 0) selectedPeColors = [document.getElementById('pe-color-picker').value];
   if (!CFG.personalEvents) CFG.personalEvents = [];
-  CFG.personalEvents.push({ name, month, day: parseInt(day), colors: selectedPeColors, repeat });
+  CFG.personalEvents.push({ name, month, day: parseInt(day), colors: selectedPeColors, repeat, eventType });
   saveConfig();
   closeModal('modal-personal');
   if (settingsViewActive) renderSettingsTab();
-  addLog(`Personal event added: ${name}`, 'ok');
+  addLog(`Personal event added: ${name} (${eventType})`, 'ok');
   update();
+}
+
+// Auto-fill colors and hint text when user picks an event type preset
+function onPeTypeChange(type) {
+  const hint = document.getElementById('pe-type-hint');
+  const picker = document.getElementById('pe-color-picker');
+  // Preset color configs per type
+  const presets = {
+    // Official US flag colors per the Flag Code
+    tribute:  { colors: ['#B22234','#FFFFFF','#3C3B6E'], hint: '🎖️ Military Tribute: US flag colors auto-loaded. Lights cycle red → white → navy — a solemn salute all night.' },
+    // Warm candlelight tones for remembrance
+    memorial: { colors: ['#E8A000','#FFF4D0','#C06000'], hint: '🕯️ Memorial: Warm candlelight colors auto-loaded. A quiet, respectful glow of remembrance.' },
+    celebration: { colors: ['#FF4500','#FFD700','#00C8E8','#A855F7'], hint: '🎉 Celebration: Festive colors auto-loaded. Customize to your taste.' },
+    personal: { colors: ['#FF69B4'], hint: '' }
+  };
+  const preset = presets[type];
+  if (!preset) return;
+  // Set hint
+  if (hint) {
+    hint.textContent = preset.hint;
+    hint.style.display = preset.hint ? 'block' : 'none';
+  }
+  // Auto-load colors into the picker (reset selectedPeColors and re-render chips)
+  if (preset.colors) {
+    selectedPeColors = [...preset.colors];
+    picker.value = preset.colors[0];
+    renderPeChips();
+  }
 }
 function deletePersonal(idx) {
   CFG.personalEvents.splice(idx,1);
