@@ -18,12 +18,14 @@ blueprint:
       3. Click "Create Automation", select the bridge entity and your target light
       4. Save — done forever. No other automations needed.
 
-    GitHub: https://github.com/TheRealApollyon/chromacal
+    GitHub: https://github.com/TheRealApollyon/ChromaCal
 
   domain: automation
   author: TheRealApollyon
   homeassistant:
-    min_version: "2023.1.0"
+    min_version: "2025.4.0"
+    # Raised from 2023.1.0 — color_temp_kelvin (the only parameter HA accepts
+    # for light.turn_on as of HA 2026.3) wasn't available before ~2025.4.
 
   input:
     chromacal_bridge:
@@ -88,7 +90,7 @@ variables:
   helper:       !input chromacal_bridge
   phase:        "{{ state_attr(helper, 'phase') | default('idle') }}"
   rgb:          "{{ state_attr(helper, 'rgb_color') | default(none) }}"
-  col_temp:     "{{ state_attr(helper, 'color_temp') | default(none) }}"
+  col_temp_k:   "{{ state_attr(helper, 'color_temp_kelvin') | default(none) }}"
   brightness:   "{{ state_attr(helper, 'brightness') | default(255) | int }}"
   transition:   "{{ state_attr(helper, 'transition') | default(30) | int }}"
   event_name:   "{{ state_attr(helper, 'event_name') | default('') }}"
@@ -124,8 +126,10 @@ action:
           - service: light.turn_on
             target: !input target_light
             data:
-              # Use color_temp from bridge if set, otherwise 2700K (370 mireds)
-              color_temp: "{{ col_temp if col_temp is not none else 370 }}"
+              # HA 2026.3 removed mireds-based color_temp entirely — only
+              # color_temp_kelvin is valid now. Use bridge value if set,
+              # otherwise default to 2700K (matches ChromaCal's classic "Warm" preset).
+              color_temp_kelvin: "{{ col_temp_k if col_temp_k is not none else 2700 }}"
               brightness: "{{ brightness }}"
               transition: "{{ transition }}"
 

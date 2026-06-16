@@ -2528,8 +2528,13 @@ async function fireScheduledCommand(key, light, segs, now) {
 
     } else if (key === 'warmwhite') {
       const ww = light.warmwhiteColor ? hexToRgb(light.warmwhiteColor) : null;
+      // HA 2026.3 fully removed the mireds-based color_temp parameter — only
+      // color_temp_kelvin is accepted now. light.warmwhiteKelvin is stored as
+      // MIREDS internally (legacy dropdown values: 370/285/250/200/154), so we
+      // convert to Kelvin here at the point of calling the API. Kelvin = 1e6/mireds.
+      const mireds = light.warmwhiteKelvin || 250;
       await lightOn(entity, {
-        ...(ww ? { rgb_color: ww } : { color_temp: light.warmwhiteKelvin || 250 }),
+        ...(ww ? { rgb_color: ww } : { color_temp_kelvin: Math.round(1000000 / mireds) }),
         brightness: 255,
         transition: Math.max(fadeIn, 30),
       });
@@ -2555,8 +2560,9 @@ async function fireScheduledCommand(key, light, segs, now) {
       addLog('🎨 Color → ' + eventName + ' — ' + light.name, 'info');
 
     } else if (key === 'default') {
-      // No event tonight — warm white
-      await lightOn(entity, { color_temp: light?.warmwhiteKelvin || 250, brightness: 200, transition: fadeIn });
+      // No event tonight — warm white. Same mireds-stored value, converted to Kelvin.
+      const mireds = light?.warmwhiteKelvin || 250;
+      await lightOn(entity, { color_temp_kelvin: Math.round(1000000 / mireds), brightness: 200, transition: fadeIn });
     }
     // warmup and pre keys: do nothing (existing automation handles sunrise fade-in)
   } catch(e) {
@@ -2608,7 +2614,10 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
   if (key === 'off') {
     eventName = 'Off'; brightness = 0;
   } else if (key === 'warmwhite') {
-    eventName = 'Warm White'; colorTemp = 250; brightness = 255;
+    // Was hardcoded to 250 mireds (4000K) regardless of the user's actual setting.
+    // Now respects light.warmwhiteKelvin (stored as mireds) and converts to Kelvin
+    // for the bridge attribute, since the Blueprint now expects color_temp_kelvin too.
+    eventName = 'Warm White'; colorTemp = Math.round(1000000 / (light.warmwhiteKelvin || 250)); brightness = 255;
   } else if (key.startsWith('event:')) {
     const name = key.slice(6);
     const seg  = segs.find(s => s.event.name === name);
@@ -2646,7 +2655,7 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
       rgb_color:      rgbFirst,          // [255, 0, 0] — Blueprint: rgb_color: {{ rgb_color }}
       rgb_colors:     rgbAll,            // [[r,g,b], ...] — full palette
       hex_colors:     hexAll,            // ["#FF0000", ...] — original hex for logging/future use
-      color_temp:     colorTemp,         // HA mireds (250 ≈ 4000K); null when using RGB
+      color_temp_kelvin: colorTemp,       // Kelvin value for color_temp_kelvin; null when using RGB
       brightness:     brightness,        // 0–255
       transition:     phaseSimple === 'off' ? fadeOut : fadeIn,
       // Event context — for Blueprint conditions and notification templates
@@ -3234,9 +3243,9 @@ async function update() {
         const approxSunH_fi = sunsetH || (now.getHours() + now.getMinutes()/60 + 0.1);
         if (now.getHours() + now.getMinutes()/60 >= approxSunH_fi - 0.02) {
           _lastFireKey[lightKey] = 'fadein_fired';
-          lightOn(light.entity, { color_temp: light.fadeInKelvin, brightness_pct: 100, transition: 30 })
+          lightOn(light.entity, { color_temp_kelvin: Math.round(1000000 / light.fadeInKelvin), brightness_pct: 100, transition: 30 })
             .catch(() => {});
-          addLog('🌅 Fade-in color set: ' + light.fadeInKelvin + ' mireds at sunset', 'info');
+          addLog('🌅 Fade-in color set: ' + Math.round(1000000 / light.fadeInKelvin) + 'K at sunset', 'info');
         }
       }
       if (desiredKey !== _lastFireKey[lightKey] && desiredKey !== 'pre' && desiredKey !== 'warmup') {
@@ -4149,7 +4158,7 @@ async function fire21GunSalute() {
   addLog('🎖️ 21 Gun Salute: commencing — 3 volleys × 7', 'info');
 
   const flash = async () => {
-    try { await lightOn(light.entity, { color_temp: 370, brightness_pct: 100, transition: 0 }); } catch(_) {}
+    try { await lightOn(light.entity, { color_temp_kelvin: 2700, brightness_pct: 100, transition: 0 }); } catch(_) {}
     await new Promise(r => setTimeout(r, 800));
     try { await lightOff(light.entity, { transition: 0 }); } catch(_) {}
     await new Promise(r => setTimeout(r, 500));
