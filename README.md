@@ -2,9 +2,21 @@
 
 **Automated holiday lighting for Home Assistant. One file. No YAML config. No integrations.**
 
-ChromaCal is a single HTML dashboard that lives in your HA `/www/` folder. It knows about 130+ holidays, awareness months, and cultural observances across US, Canada, UK, Australia, EU, and globally — and automatically cycles your lights through the right colors every night, year after year, without maintenance.
+ChromaCal is a single HTML dashboard that lives in your HA `/www/` folder. It knows about 130+ holidays, awareness months, and cultural observances across US, Canada, UK, Australia, EU, and globally, and automatically cycles your lights through the right colors every night, year after year, without maintenance.
 
 > *"The whole world celebrates with light. Now you can too."*
+
+---
+
+## How this was built
+
+The code in this repo was written with extensive AI assistance (Claude, Anthropic). Saying otherwise would be dishonest, so this isn't buried in a footnote.
+
+What's actually mine: the entire feature set and how it behaves, every architectural decision (the holiday calendar scope, the skip system rules, the scheduling model, the Pub/Sub bridge that keeps lights running when the dashboard's closed), the visual design direction, and every bit of testing against my own real ZHA lights and Zigbee mesh. Bugs that AI-written code introduced got found by me actually using the thing, not by code review. What ships and what doesn't is my call.
+
+What AI did: wrote the bulk of the actual JavaScript, YAML, and documentation implementing those decisions, helped debug issues I found through real testing, and helped research how the wider Home Assistant community handles comparable problems.
+
+If that changes how you weigh this project, that's a completely fair call to make. I'd rather you make it with the real picture than a curated one.
 
 ---
 
@@ -15,8 +27,8 @@ ChromaCal is a single HTML dashboard that lives in your HA `/www/` folder. It kn
 - **Split-night scheduling** — Multiple June awareness months (Pride, Men's Health, Caribbean Heritage) automatically split the color window equally
 - **Pub/Sub bridge** — Companion Blueprint keeps lights running server-side even when the browser is closed
 - **Tonight's Schedule** — Full visual timeline with countdown, phase list, feature toggles
-- **Quick Controls** — Test colors, Color Override, Force White (with Kelvin picker), Emergency Mode (US/EU/Amber/Red-White)
-- **Skip system** — Permanent skip (⊘) or Skip Tonight only (🌙, auto-resets at midnight)
+- **Quick Controls** — Test colors, Color Override, Force White (with Kelvin picker), Emergency Mode (US/EU/Amber/Red-White), 21 Gun Salute for military tribute events
+- **Skip system** — Permanent skip (⊘) or Skip Tonight only (🌙, auto-resets at midnight), both always reversible
 - **Tonight's Pick** — Force one event to own the full window (⭐)
 - **Warm White** — Security lighting at a configurable Kelvin (2700K → 6500K) before lights-off
 - **Fade-In control** — 30s to 10min crossfade when colors fire
@@ -57,6 +69,8 @@ Click the badge to import the automation engine directly into your Home Assistan
 [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FTheRealApollyon%2FChromaCal%2Fmain%2Fblueprints%2Fautomation%2Fchromacal%2Fchromacal_sync.yaml)
 
 *Manual fallback:* Copy `blueprints/automation/chromacal/chromacal_sync.yaml` to `/config/blueprints/automation/chromacal/` on your HA instance.
+
+Requires HA 2025.4.0 or newer (uses `color_temp_kelvin`, since HA 2026.3 fully removed the older mireds-based `color_temp` parameter).
 
 ---
 
@@ -108,7 +122,9 @@ Security lighting before lights-off. Configurable Kelvin:
 
 ## 🔗 The Bridge (Blueprint)
 
-ChromaCal publishes its schedule to `input_text.chromacal_[lightname]` in HA's state machine every 30 seconds. The companion Blueprint watches this entity and fires physical light commands — so lights change color even when ChromaCal's browser tab is closed.
+ChromaCal publishes its schedule to `input_text.chromacal_[lightname]` in HA's state machine every 30 seconds. The companion Blueprint watches this entity and fires physical light commands, so lights change color even when ChromaCal's browser tab is closed.
+
+**Worth knowing:** the bridge only gets fresh values while ChromaCal's tab is open and active, since that's what's doing the publishing. If you need the schedule to run through a phase transition (color window into warm white into off) with the tab fully closed all evening, keep a tab open somewhere, a spare device or kiosk display works well. A fully headless backend that doesn't need a browser at all is the explicit goal of the next major version, see the roadmap.
 
 **Hardened against HA restarts:** Uses `state_attr()` reads (not trigger context) and triggers on `homeassistant: start` and `automation_reloaded` events, so it recovers correctly after any interruption.
 
@@ -124,6 +140,12 @@ Alternating emergency lighting patterns using Zigbee-safe 3-second intervals:
 - 🔴⚪ **Red/White** — Fire truck pattern
 
 Click again to cancel and resume the schedule.
+
+---
+
+## 🎖️ Military Tribute & Memorial Events
+
+Personal events support dedicated types beyond birthdays: Military Tribute auto-loads official US Flag Code colors for honoring a veteran, Memorial uses warm candlelight tones for remembrance. Quick Controls also includes a 21 Gun Salute, three volleys of seven white flashes with a dimmed red glow between volleys, for nights that call for it.
 
 ---
 
@@ -147,6 +169,7 @@ For color-temp-only lights (no RGB), warm white and Force White work; event colo
 ```
 chromacal/
 ├── README.md
+├── ROADMAP.md
 ├── hacs.json
 ├── LICENSE
 ├── dist/
@@ -162,6 +185,12 @@ chromacal/
 ## 🔒 Privacy
 
 ChromaCal stores your HA URL and token in browser `localStorage` only. Nothing is sent anywhere except directly to your own Home Assistant instance. No cloud, no analytics, no ads.
+
+---
+
+## 🗺️ What's Next
+
+A major architecture change is planned, splitting ChromaCal into a real Home Assistant Integration (the scheduling brain, running server-side with zero browser dependency) and a proper Lovelace custom card (the control surface). See `ROADMAP.md` for the full plan and reasoning.
 
 ---
 
