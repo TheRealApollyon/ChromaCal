@@ -186,6 +186,10 @@ chromacal/
 
 ChromaCal stores your HA URL and token in browser `localStorage` only. Nothing is sent anywhere except directly to your own Home Assistant instance. No cloud, no analytics, no ads.
 
+**Worth knowing if you use Nabu Casa or any other remote access method:** files served from HA's `/local/` URL (the `www` folder, where this dashboard lives) aren't protected by HA's own authentication. This is true for anything anyone puts in `www`, not specific to ChromaCal, and it's a long-standing, documented characteristic of how HA serves static files, not a bug, browser-loaded resources like images don't carry auth headers, so HA made `/local/` deliberately unauthenticated to keep dashboard images and similar resources working. It applies the same way through a Nabu Casa URL as it does locally.
+
+Practically, since ChromaCal never writes your token or your settings into the file itself, anyone who finds the URL without already having your token sees an empty setup screen, not your actual lights, schedule, or configuration. Still genuinely worth knowing before you install, especially with remote access configured, since it's true of this file the same as any other file you've ever placed in `www`.
+
 ---
 
 ## 🗺️ What's Next
