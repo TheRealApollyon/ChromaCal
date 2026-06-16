@@ -4153,15 +4153,28 @@ async function fire21GunSalute() {
   const light = CFG.lights[activeLightIdx];
   if (!light) { addLog('No light configured', 'warn'); return; }
 
+  // ── TIMING — tune these if your mesh needs more or less room ──────────────
+  // FLASH_TRANSITION: a true 0 demands an instantaneous snap with zero grace
+  // period. Real Zigbee commands, especially to a GROUP entity fanning out to
+  // multiple physical bulbs, have genuine radio propagation latency. A short
+  // transition tends to land far more reliably on real hardware than a hard
+  // instant snap, which can get coalesced or dropped if the next command
+  // arrives before the bulb's radio has even processed the "instant" one.
+  const FLASH_TRANSITION = 0.1;   // seconds
+  const FLASH_ON_MS      = 1000;  // how long the flash stays visibly on
+  const FLASH_OFF_MS     = 700;   // dark gap before the next round
+  const VOLLEY_PAUSE_MS  = 3000;  // dim red glow between volleys
+
   const btn = document.getElementById('btn-salute');
   if (btn) { btn.textContent = '🎖️ Salute in progress...'; btn.disabled = true; }
   addLog('🎖️ 21 Gun Salute: commencing — 3 volleys × 7', 'info');
 
   const flash = async () => {
-    try { await lightOn(light.entity, { color_temp_kelvin: 2700, brightness_pct: 100, transition: 0 }); } catch(_) {}
-    await new Promise(r => setTimeout(r, 800));
-    try { await lightOff(light.entity, { transition: 0 }); } catch(_) {}
-    await new Promise(r => setTimeout(r, 500));
+    // True bright white, not warm 2700K — reads as a flash, not a porch light.
+    try { await lightOn(light.entity, { rgb_color: [255, 255, 255], brightness_pct: 100, transition: FLASH_TRANSITION }); } catch(_) {}
+    await new Promise(r => setTimeout(r, FLASH_ON_MS));
+    try { await lightOff(light.entity, { transition: FLASH_TRANSITION }); } catch(_) {}
+    await new Promise(r => setTimeout(r, FLASH_OFF_MS));
   };
 
   try {
@@ -4171,9 +4184,9 @@ async function fire21GunSalute() {
         await flash();
       }
       if (volley < 3) {
-        // 3-second pause between volleys — dim red glow to simulate smoke/heat
+        // Pause between volleys — dim red glow to simulate smoke/heat
         try { await lightOn(light.entity, { rgb_color: [30, 0, 0], brightness_pct: 15, transition: 1 }); } catch(_) {}
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, VOLLEY_PAUSE_MS));
       }
     }
     addLog('🎖️ 21 Gun Salute complete — resuming schedule', 'ok');
