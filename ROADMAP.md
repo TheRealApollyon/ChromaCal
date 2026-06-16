@@ -56,6 +56,28 @@ This gets stated the same way in the README, not buried, not hedged. People can 
 
 ---
 
+## Surfaced from the first round of public feedback
+
+A real design problem came in within the first day of posting, worth recording properly rather than letting it disappear into a comment thread. WLED presets (saved effect/color/segment configurations) don't get triggered through the light entity at all, they go through a separate `select.select_option` call against a dedicated select entity. That alone would just mean an additional code path for preset-capable targets. The actual conflict is deeper: WLED clears whatever preset is active the moment any subsequent `light.turn_on` call lands on that device, and ChromaCal's reliability model depends on re-firing `light.turn_on` on a fixed interval specifically so the schedule survives a dropped connection or restart.
+
+That means preset-based targets need fundamentally different reassertion behavior than plain RGB targets, fire once on an actual state change, never repeatedly re-assert, rather than the interval-based re-fire every other target relies on for resilience. Worth designing into the Phase 2 coordinator deliberately, a per-target reassertion strategy rather than one global interval applied uniformly to everything. Not scoped for v1, and not a quick addition to v2 either, this needs its own design pass once the coordinator itself exists.
+
+A follow-up request sharpened what the actual feature would look like: a calendar populated with holidays where each day or event can have a WLED preset assigned with its own start/end time, the calendar showing an indicator when a day has something assigned plus a color preview of that preset. Reasonable, specific UI shape, worth keeping for when this gets designed properly. One correction worth locking in now so it doesn't bake in wrong: selection has to go through the preset's name via `select.select_option`, not a preset number, the old numbered `wled.preset` service is deprecated.
+
+---
+
+## A bigger vision worth weighing deliberately, not just adding
+
+A different kind of idea came up in the same feedback round: a real, configurable daily baseline routine, with holidays and awareness months surfacing as something you actively opt into or define yourself, rather than everything firing silently by default.
+
+Worth knowing this is closer to the existing bones than it sounds. v1 already falls back to a literal default state on any night with nothing scheduled, a single fixed warm color running the same window the holiday colors would otherwise occupy. Making that baseline genuinely configurable instead of a hardcoded value is a clean improvement with no real downside, that part should just happen.
+
+The "ask before applying" part is a real tradeoff, not a free addition, worth being honest about rather than just folding in. The entire pitch right now, the first thing the README says, is zero maintenance, and that's specifically what's gotten organic positive reaction so far. With 130+ events across a year, something new happens every two or three days on average, some weeks several stack at once. If every one needs an active decision, that's not zero maintenance anymore, it's an approval queue. The skip system works today because it's opt-out, assume yes and let people subtract what they don't want, not opt-in to everything.
+
+Right direction: keep full automatic as the untouched default. Add an optional mode, scoped per category rather than all-or-nothing, where someone could choose to be asked first specifically for, say, Awareness months, while Federal, Military, and Personal events stay fully automatic. Gets the agency where taste genuinely varies most, without turning the whole thing into something that needs constant attention.
+
+---
+
 **Phase 1, skeleton.** Minimal `custom_components/chromacal/` that HACS can install and HA can load: `manifest.json`, `__init__.py`, `config_flow.py` with a basic Add Integration wizard, one placeholder sensor entity. No scheduling logic yet. Goal is purely proving the packaging and loading mechanics work end to end before porting anything real into it.
 
 **Phase 2, port the brain.** Move the holiday calendar (Easter, Islamic estimates, nth-weekday US holidays, the rest), split-night logic, and color style transforms from JavaScript into Python. Wire it to a `DataUpdateCoordinator` that recomputes the current phase on an interval and fires `light.turn_on`/`light.turn_off` directly, no REST, no token.
