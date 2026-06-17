@@ -2548,7 +2548,7 @@ async function fireScheduledCommand(key, light, segs, now) {
       const raw   = seg.event.colors || ['#FFC97A'];
       const rgbs  = raw.map(h => {
         const [r,g,b] = hexToRgb(h);
-        return applyStyle(r, g, b, style);
+        return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced');
       });
       // For single-color events just set it; for multi-color cycle them
       const firstRgb = rgbs[0];
@@ -2628,7 +2628,7 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
       const style = LIGHTING_STYLES[light.intensityOverride || CFG.lightingStyle || 'balanced'] || LIGHTING_STYLES.balanced;
       const rawCols = seg.event.colors || ['#FFC97A'];
       hexAll = rawCols;  // original hex palette — useful for logging and future multi-step
-      rgbAll = rawCols.map(h => { const [r,g,b]=hexToRgb(h); return applyStyle(r,g,b,style); });
+      rgbAll = rawCols.map(h => { const [r,g,b]=hexToRgb(h); return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced'); });
       rgbFirst = rgbAll[0];
     }
   }
