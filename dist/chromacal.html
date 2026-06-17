@@ -2544,20 +2544,24 @@ async function fireScheduledCommand(key, light, segs, now) {
       const eventName = key.slice(6);
       const seg = segs.find(s => s.event.name === eventName);
       if (!seg) return;
-      const style = LIGHTING_STYLES[light.intensityOverride || CFG.lightingStyle || 'balanced'] || LIGHTING_STYLES.balanced;
       const raw   = seg.event.colors || ['#FFC97A'];
       const rgbs  = raw.map(h => {
         const [r,g,b] = hexToRgb(h);
         return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced');
       });
-      // For single-color events just set it; for multi-color cycle them
-      const firstRgb = rgbs[0];
+      // For single-color events just set it; for multi-color, cycle them at 30s
+      // each — same cadence as the Test Tonight's Color loop. Computed from
+      // elapsed time since this segment started rather than a counter, so it's
+      // stateless and self-correcting no matter when this function gets called.
+      const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
+      const colorIdx   = rgbs.length > 1 ? Math.floor(elapsedSec / 30) % rgbs.length : 0;
+      const activeRgb  = rgbs[colorIdx];
       await lightOn(entity, {
-        rgb_color: firstRgb,
+        rgb_color: activeRgb,
         brightness: 255,
         transition: fadeIn,
       });
-      addLog('🎨 Color → ' + eventName + ' — ' + light.name, 'info');
+      addLog('🎨 Color → ' + eventName + (rgbs.length > 1 ? ` (${colorIdx+1}/${rgbs.length})` : '') + ' — ' + light.name, 'info');
 
     } else if (key === 'default') {
       // No event tonight — warm white. Same mireds-stored value, converted to Kelvin.
@@ -2589,6 +2593,7 @@ async function fireScheduledCommand(key, light, segs, now) {
 //      HA startup, automation reloads, and reboots — not just on state change events
 async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
   if (!CFG.haUrl || !CFG.token || !light?.entity) return;
+  const nowH = now.getHours() + now.getMinutes()/60;
 
   const slug = (light.name || light.entity)
     .toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_|_$/g, '');
@@ -2625,11 +2630,15 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
       eventName = seg.event.name;
       eventType = seg.event.type || 'awareness';
       eventCat  = seg.event.cat  || 'awareness';
-      const style = LIGHTING_STYLES[light.intensityOverride || CFG.lightingStyle || 'balanced'] || LIGHTING_STYLES.balanced;
       const rawCols = seg.event.colors || ['#FFC97A'];
       hexAll = rawCols;  // original hex palette — useful for logging and future multi-step
       rgbAll = rawCols.map(h => { const [r,g,b]=hexToRgb(h); return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced'); });
-      rgbFirst = rgbAll[0];
+      // Same elapsed-time cycling logic as fireScheduledCommand, so the single
+      // rgb_color field stays correct too, not just the full rgb_colors array —
+      // matters because the Blueprint may only read the single-color field.
+      const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
+      const colorIdx    = rgbAll.length > 1 ? Math.floor(elapsedSec / 30) % rgbAll.length : 0;
+      rgbFirst = rgbAll[colorIdx];
     }
   }
 
@@ -3087,10 +3096,10 @@ function setOrb(colors) {
   if (!colors || colors.length === 0) {
     orb.style.background = 'var(--s3)';
     orb.style.boxShadow = 'none';
-    orb.innerHTML = '<span class="orb-icon" style="opacity:.4">💡</span>';
+    orb.innerHTML = '';
     return;
   }
-  orb.innerHTML = '<span class="orb-icon">💡</span>';
+  orb.innerHTML = '';
   const c0 = colors[0], cN = colors[colors.length-1];
   if (colors.length === 1) {
     // Single color: radial gradient for 3D glowing sphere look
@@ -4171,9 +4180,9 @@ async function fire21GunSalute() {
 
   const flash = async () => {
     // True bright white, not warm 2700K — reads as a flash, not a porch light.
-    try { await lightOn(light.entity, { rgb_color: [255, 255, 255], brightness_pct: 100, transition: FLASH_TRANSITION }); } catch(_) {}
+    try { await lightOn(light.entity, { rgb_color: [255, 255, 255], brightness_pct: 100, transition: FLASH_TRANSITION }); } catch(e) { addLog('Salute flash error: ' + e.message, 'err'); }
     await new Promise(r => setTimeout(r, FLASH_ON_MS));
-    try { await lightOff(light.entity, { transition: FLASH_TRANSITION }); } catch(_) {}
+    try { await lightOff(light.entity, { transition: FLASH_TRANSITION }); } catch(e) { addLog('Salute flash-off error: ' + e.message, 'err'); }
     await new Promise(r => setTimeout(r, FLASH_OFF_MS));
   };
 
@@ -4185,7 +4194,7 @@ async function fire21GunSalute() {
       }
       if (volley < 3) {
         // Pause between volleys — dim red glow to simulate smoke/heat
-        try { await lightOn(light.entity, { rgb_color: [30, 0, 0], brightness_pct: 15, transition: 1 }); } catch(_) {}
+        try { await lightOn(light.entity, { rgb_color: [30, 0, 0], brightness_pct: 15, transition: 1 }); } catch(e) { addLog('Salute volley-pause error: ' + e.message, 'err'); }
         await new Promise(r => setTimeout(r, VOLLEY_PAUSE_MS));
       }
     }
@@ -4298,17 +4307,22 @@ function startEmergency() {
   else if (P === 'red-white') sequence = ['#FF0000', '#FFFFFF'];     // Fire: red/white
   else sequence = ['#FF0000'];
 
+  // EMG_TRANSITION matches the Salute's established pattern — a true 0 demands
+  // an instantaneous snap with zero grace period, which can get coalesced or
+  // dropped on real Zigbee hardware. EMG_INTERVAL already gives 3s of breathing
+  // room between fires, so this is mainly about not sending the risky value itself.
+  const EMG_TRANSITION = 0.1;
   let idx = 0;
   const fire = async () => {
     const col = sequence[idx % sequence.length];
     try {
       if (col === null) {
         // Brief off step — creates pulse effect for single-color patterns
-        await lightOff(light.entity, { transition: 0 });
+        await lightOff(light.entity, { transition: EMG_TRANSITION });
       } else {
-        await lightOn(light.entity, { rgb_color: hexToRgb(col), brightness_pct: 100, transition: 0 });
+        await lightOn(light.entity, { rgb_color: hexToRgb(col), brightness_pct: 100, transition: EMG_TRANSITION });
       }
-    } catch(e) {}
+    } catch(e) { addLog('Emergency fire error: ' + e.message, 'err'); }
     idx++;
   };
   fire(); // Fire immediately on activation
@@ -5261,7 +5275,7 @@ async function updateHouseMarkers() {
       const rgb  = state.attributes?.rgb_color;
       const color = isOn ? (rgb ? `rgb(${rgb.join(',')})` : '#f59e0b') : '#333333';
       setMarkerVisualColor(i, color, isOn);
-    } catch(e) {}
+    } catch(e) { addLog(`Marker sync failed for ${CFG.lights[m.lightIndex].name || 'light'}: ${e.message}`, 'warn'); }
   }
 }
 function setMarkerVisualColor(i, colorStr, isOn) {
