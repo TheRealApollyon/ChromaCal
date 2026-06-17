@@ -1,459 +1,103 @@
-# Burden of Survival -- Development Roadmap
+# ChromaCal v2 Roadmap
 
-> **Philosophy:** Build systems individually. Integrate in sequence. Ship the smallest complete thing first. Every phase produces something playable before the next begins.
-
----
-
-## Release Targets Overview
-
-| Release | Name | Target | Description |
-|---------|------|--------|-------------|
-| .5 | The Property | Month 8-10 | Real property, basic zombies, core survival loop |
-| 1.0 | Rung 1 Early Access | Month 36-48 | Full hometown solo experience |
-| 2.0 | The County | TBD | Co-op, expanded map, community formation |
-| 3.0 | The State | TBD | Multiplayer, factions, geographic discovery |
-| 4.0 | The Nation | TBD | MMO scale, civilizational endgame |
-| 5.0 | The World | TBD | Global simulation, true win condition |
+*Consolidated from the "ChromaCal integration question" conversation and the June 15-16 debugging session. This is a planning document, not a build log, nothing here is built yet.*
 
 ---
 
-## PHASE 0: Foundation
-**Duration:** Months 1-2  
-**Goal:** Engine configured, tools installed, first real geography in engine
+## Where v1 stands right now
 
-### Tasks
-- [ ] UE5 installation and project configuration
-- [ ] GitHub repository setup with Git LFS for binary assets
-- [ ] Cesium for Unreal plugin installation and configuration
-- [ ] OpenStreetMap data pipeline research and first test
-- [ ] Display Ward/Cabot, Arkansas terrain in UE5 using Cesium
-- [ ] Basic character controller (movement, camera, first/third person toggle)
-- [ ] Basic project folder structure established
-- [ ] UE5 learning: World Partition, Large World Coordinates, basic Blueprints
-
-### Milestone
-**Walk around a rough version of the Ward/Cabot area in UE5.**  
-Terrain present. Character moves. Nothing else required. This proves the geographic premise works.
-
-### Success Criteria
-- Real GPS coordinates map to correct terrain in engine
-- Character can walk, run, crouch without fighting the engine
-- Frame rate acceptable at ground level
+Live, working, and not at risk from anything in this document. Standalone `chromacal.html` in HA's `/www/` folder, REST API calls authenticated with a long-lived token, a companion Blueprint (`chromacal_sync.yaml`) watching a pub/sub `input_text` bridge entity for resilience when the tab closes. The `color_temp_kelvin` breaking change from HA 2026.3 is fixed across every code path. This stays exactly as-is and keeps running while v2 gets designed and built. Nothing below blocks or risks it.
 
 ---
 
-## PHASE 1: Release .5 -- "The Property"
-**Duration:** Months 3-10  
-**Goal:** Playable prototype on real property with functional zombie simulation
+## The core decision: two decoupled pieces, not one
 
-### What This Release Contains
-- Shane's actual property in Ward/Cabot, AR (1.5 acres, real dimensions)
-- The house -- procedurally generated from OSM footprint or hand-built
-- 10-20 zombies on and around the property
-- Day/night cycle (real sunrise/sunset times for the location)
-- Basic interaction system (pick up, examine objects)
-- Zero HUD -- committed from day one
-- Basic character voice (10-15 lines communicating state)
-- Basic survival loop -- character can die, session resets
-- Basic audio -- footsteps, ambient environment, zombie audio
+This morning's conversation left an open question about converting the dashboard into a proper `custom:chromacal-card` Lovelace element instead of an iframe page. Tonight's debugging surfaced a second, separate problem: the entire scheduling brain currently lives in browser JavaScript, which means nothing runs unless a tab stays open. These turned out to be two different problems with two different fixes, not one.
 
-### What This Release Does NOT Contain
-- Pre-outbreak window
-- Psychological weight system (stubbed only)
-- Notebook (stubbed -- can open, can't write yet)
-- Full acoustic herd system (basic detection only)
-- NPC companions
-- Full fatigue/soreness system (basic energy only)
-- Multiple locations
-- Story or progression
+**Backend** (`custom_components/chromacal/`): a real HACS Integration, written in Python, loaded directly into Home Assistant's own process. This is where the scheduling brain moves to, the 130+ holiday calendar, the floating-date math, split-night logic, skip system, color style transforms. It runs as long as HA itself runs, with zero dependency on any browser or tab.
 
-### System Build Order for Phase 1
+**Frontend** (`custom:chromacal-card`): a true Lovelace custom card using HA's native `hass` object, replacing the current standalone page. Becomes a control and configuration surface that reads state from the backend's entities, not the thing keeping the schedule alive.
 
-**Weeks 1-4: The Property**
-- [ ] OSM building footprint data for the specific property
-- [ ] Rough house geometry generated or hand-built
-- [ ] Property boundaries and terrain accurate to real dimensions
-- [ ] Basic interior -- navigable rooms, doors that open
+**Why Integration and not Add-on:** Add-ons require Home Assistant's Supervisor, which only exists on Home Assistant OS or Supervised installs. Pi4-Services runs HA straight through Docker Compose, the Container install method, which has no Supervisor at all and never will without changing how HA itself is installed. An Add-on built for ChromaCal would be a dead end on your own setup and on every other Docker Compose user's setup too, a meaningfully sized chunk of the exact homelab audience this project is aimed at. Adaptive Lighting, the closest comparable project in the entire ecosystem, proves the Integration path alone is enough for serious adoption: HACS install, one config entry, Add Integration wizard, done, no Supervisor required anywhere in that flow.
 
-**Weeks 5-8: The Zombies**
-- [ ] Basic zombie AI state machine: Idle / Alerted / Chasing
-- [ ] Basic sight detection (cone, distance-based)
-- [ ] Basic sound detection (radius-based, placeholder for full acoustic system)
-- [ ] Zombie movement and navigation on the property
-- [ ] Basic zombie attack -- character can be downed
-
-**Weeks 9-12: The Day**
-- [ ] Day/night cycle tied to real sunrise/sunset for Ward, AR
-- [ ] Basic dynamic lighting (sun position, shadows)
-- [ ] Basic weather placeholder (clear/overcast toggle)
-- [ ] Time of day affects zombie behavior (slightly more active at dusk)
-
-**Weeks 13-16: The Feel**
-- [ ] Zero HUD confirmed -- all meters removed
-- [ ] Basic character voice lines (tired, hungry, scared, hurt)
-- [ ] Basic interaction system (approach, prompt, pick up)
-- [ ] Basic inventory (items carried, simple list)
-- [ ] Basic survival needs (hunger/thirst timers that produce voice feedback)
-- [ ] Basic audio pass (footsteps on different surfaces, ambient, zombie sounds)
-
-**Weeks 17-20: Polish and Testing**
-- [ ] Performance optimization for the property scale
-- [ ] Bug fixing
-- [ ] Playtesting with people who don't know what the game is
-- [ ] Document what works and what doesn't
-- [ ] Adjust based on feedback
-
-### Milestone
-**Show someone who doesn't know what the game is, hand them a controller, and watch them figure it out without being told anything.**  
-If they understand how to read their character's state without UI, the design is working.
-
-### Success Criteria
-- Player can survive for 10+ minutes without being told how
-- Character voice lines communicate state clearly enough to play without HUD
-- Zombies behave in ways that feel logical and readable
-- The property feels like A real place, not a game level
-- Frame rate stable
+**The token problem solves itself for free.** A custom_component's code runs inside HA's own Python process. It calls `hass.services.async_call("light", "turn_on", {...})` directly, in-process, no HTTP round trip, no token of any kind. This was something this morning's conversation hadn't resolved yet, full token elimination, and it turns out to not even need Ingress or Supervisor machinery to get there.
 
 ---
 
-## PHASE 2: Core Physical Systems
-**Duration:** Months 10-18  
-**Goal:** The physical simulation working at the depth the design requires
+## Decided
 
-### Systems to Build
+**Both panel and card, one shared component.** A Lovelace custom element can serve as a compact card embedded in a normal dashboard and as full-screen panel content, the same underlying code, two entry points. Build a compact summary view, today's event, status dot, quick toggles, for the card form, with a button that opens the full experience as a panel. Bubble Card's popup pattern is direct community precedent for exactly this shape.
 
-**Physical Fatigue System**
-- [ ] Acute fatigue (stamina within a session)
-- [ ] Accumulated fatigue (soreness that carries between sessions)
-- [ ] Recovery modeling (sleep quality, nutrition, rest)
-- [ ] Injury system (twisted ankle, cuts, infection progression)
-- [ ] Adrenaline state (triggers, effects, crash, debt)
-- [ ] Willpower resource (expressed through animation and voice, not UI)
-- [ ] The couch mechanic (character seeks rest when depleted)
-- [ ] Background/training modifier (military, laborer, sedentary profiles)
+**Theme-native by default, fully brandable on request.** The card reads Home Assistant's own theme variables out of the box, so it automatically matches whatever theme each person has installed and looks native sitting next to Mushroom-style cards rather than clashing. The current rainbow CHROMACAL identity, Twilight, Sci-Fi, Mono, becomes an opt-in style choice layered on top, not the forced default. Built to play nicely with card-mod so anyone can go further without needing the maintainer to build a bespoke theming system. Gets the adoption benefit of looking native and the full customization benefit at the same time, not a tradeoff between them.
 
-**Survival Needs (Full)**
-- [ ] Hunger with nutritional modeling (calories, protein, variety)
-- [ ] Thirst (water quality matters -- clean vs. contaminated)
-- [ ] Temperature system (clothing, shelter, weather interaction)
-- [ ] Sleep system (quality, location safety, recovery rate)
-- [ ] Medical needs (illness, infection, chronic conditions)
+**Skip state is always reversible, no exceptions.** Already true in v1, the permanent skip toggle restores on a second click same as it sets on the first. This is a hard rule for v2 too: nothing in the skip system is ever a one-way action, regardless of what it's labeled. Moving skips to real HA switch entities in Phase 3 makes this structurally guaranteed for free, a switch entity always has both an on and an off state by definition.
 
-**Physical Inventory**
-- [ ] Real-time bag interaction animation
-- [ ] Item weight affecting movement
-- [ ] Access time based on item position in pack
-- [ ] Clothing system (layers, warmth, protection, encumbrance)
-
-### Milestone
-**Surviving for an in-game week on the property should feel like work.**  
-The player should be managing their character's physical state as a primary challenge, not just avoiding zombies.
+**What entities does the backend actually expose?** An entity is Home Assistant's unit of tracked state, the same kind of thing as `light.shane_office_dongle_outside_lights_zha`. Right now ChromaCal's only footprint inside HA's actual state machine is the one `input_text` bridge helper, everything else lives invisibly in the browser. The backend integration creates real entities the same way ZHA creates light entities: a sensor per configured light showing the current event and phase, switch entities for permanent and tonight-only skip per event, button entities for one-shot actions like the 21 Gun Salute or Force White. Once these exist, any dashboard, automation, or voice command can read and control ChromaCal's state without its own UI ever being open. Exact entity list gets finalized once Phase 2 starts.
 
 ---
 
-## PHASE 3: The Acoustic Zombie Simulation
-**Duration:** Months 12-24 (overlaps Phase 2)  
-**Goal:** Zombie behavior driven entirely by acoustic simulation
+## Lessons from tonight worth carrying into the build
 
-### Systems to Build
+The `color_temp_kelvin` bug existed because the parameter name was a hand-typed string in five separate places, with no single source of truth. HA's own Python light component exposes constants for exactly this (`ATTR_COLOR_TEMP_KELVIN` and friends), which a real integration should use instead of string literals. When HA deprecates or renames something again, code using HA's own constants tends to get caught by static analysis or simply continues working through the compatibility shims HA provides internally, instead of silently 400ing in production until someone notices.
 
-**MetaSounds Acoustic Framework**
-- [ ] Sound event system (every action produces a sound with radius and frequency)
-- [ ] Sound propagation through walls and distance (attenuation modeling)
-- [ ] Material-based sound modification (grass vs. concrete vs. wood)
-- [ ] Weather effects on sound propagation (rain masking, wind distortion)
+The skip-system date-keying bug taught a more general lesson, isolate state by the dimension that actually varies (calendar date, in that case) rather than relying on cleanup functions running at the right moment. Worth keeping in mind in Python too.
 
-**Zombie Acoustic AI**
-- [ ] Individual zombie hearing radius and sensitivity
-- [ ] Zombie attention state triggered by sound events
-- [ ] Alerted zombie producing its own sound (groaning)
-- [ ] Sound cascade: alerted zombie draws nearby zombies
-- [ ] Herd formation through cascade reaching critical mass
-- [ ] Herd self-sustaining: collective noise of herd becomes permanent stimulus
-- [ ] Migration behavior: herd moves toward stimulus, continues until blocked
-
-**Zombie State Machine (Full)**
-- [ ] Idle (wandering, low-frequency wheeze)
-- [ ] Curious (heard something, investigating)
-- [ ] Alerted (confirmed stimulus, aggressive hiss)
-- [ ] Chasing (active pursuit)
-- [ ] Herd member (part of migrating group, different behavior)
-- [ ] Blocked (obstacle encountered, spreads along obstacle)
-
-**Environmental Interaction**
-- [ ] Zombies interact with doors (pressure, eventually breach)
-- [ ] Zombies navigate around obstacles realistically
-- [ ] Zombies drawn to light sources at night
-- [ ] Weather effects on zombie behavior (cold slows, heat doesn't)
-
-### Milestone
-**A player who makes noise in one part of the map should be able to watch a herd form and migrate organically without any scripted triggers.**
+The kiosk watchdog failure tonight was caused by a script with zero error handling around its one critical operation, a single uncaught exception silently killed the entire loop with no trace. Anything in the v2 backend that runs as a persistent background task (which is the whole point of moving to an Integration) needs the same discipline, wrap the recurring work, log failures, never let one bad iteration take down the whole coordinator.
 
 ---
 
-## PHASE 4: The Diegetic Experience
-**Duration:** Months 18-30  
-**Goal:** Full no-HUD diegetic design working -- player reads all game state through character
+## How this gets built, stated plainly
 
-### Systems to Build
+This was a major topic in this morning's conversation and deserves to live somewhere permanent, not just in chat history. The code in this project has been written with extensive AI assistance, and that's going to remain true through v2 as well. Pretending otherwise would be dishonest, and it's not how this gets represented to the community when it ships.
 
-**Internal Voice System**
-- [ ] Voice line database organized by trigger category
-- [ ] Psychological state modifier affecting delivery
-- [ ] Physical state modifier affecting delivery
-- [ ] Context system (what voice lines fire when)
-- [ ] Internal vs. external voice audio treatment
-- [ ] "I don't want to forget this" notebook prompt system
-- [ ] Voice lines for every survival state combination
+What stays human, every time: the feature set and what ChromaCal actually does, every architectural decision including the ones in this document, all testing against real hardware, real Zigbee mesh behavior, real bugs found by actually using it, and final judgment on what ships and what doesn't. AI writes a large share of the actual implementation, helps debug issues found during real testing, and helps research how the wider community handles comparable problems, the Adaptive Lighting comparison that shaped the backend architecture decision above came directly out of that.
 
-**Fight / Flight / Freeze System**
-- [ ] Threat detection triggering freeze response
-- [ ] Freeze duration based on character background and prior exposure
-- [ ] Flight response breaking freeze (poorly directed, adrenaline-driven)
-- [ ] Fight response threshold (blocked flight, protecting someone, prior training)
-- [ ] Post-adrenaline crash system
-- [ ] Habituation over time (shorter freeze, more directed flight)
-- [ ] Human violence triggering same system (not just zombies)
-
-**Psychological Weight System**
-- [ ] Event tracking (what happened, when, who was involved)
-- [ ] Weight accumulation by event category
-- [ ] Deterioration expression (animation changes, voice changes, behavior changes)
-- [ ] Recovery pathways (social connection, rest, small victories, beauty)
-- [ ] Dissociation state (lights on, nobody home)
-- [ ] Resilience building over time with adequate support
-
-**The Notebook**
-- [ ] Physical notebook object (found, not given)
-- [ ] Writing animation (takes real time)
-- [ ] Text input system
-- [ ] Notebook damage system (water, fire)
-- [ ] Kill counter (each entry is a person)
-- [ ] People you've known list
-- [ ] Map annotation functionality
-- [ ] Notebook persistence through death (world contains it)
-
-### Milestone
-**Play for one hour with eyes closed during UI moments. If the character's voice communicates everything needed to survive, the system works.**
+This gets stated the same way in the README, not buried, not hedged. People can weigh the project accordingly, that's their call to make, and they should get to make it with the real picture.
 
 ---
 
-## PHASE 5: The Geographic Pipeline
-**Duration:** Months 24-36  
-**Goal:** Any location on Earth selectable and playable
+## Surfaced from the first round of public feedback
 
-### Systems to Build
+A real design problem came in within the first day of posting, worth recording properly rather than letting it disappear into a comment thread. WLED presets (saved effect/color/segment configurations) don't get triggered through the light entity at all, they go through a separate `select.select_option` call against a dedicated select entity. That alone would just mean an additional code path for preset-capable targets. The actual conflict is deeper: WLED clears whatever preset is active the moment any subsequent `light.turn_on` call lands on that device, and ChromaCal's reliability model depends on re-firing `light.turn_on` on a fixed interval specifically so the schedule survives a dropped connection or restart.
 
-**Location Selection**
-- [ ] Map interface for pin drop
-- [ ] City/address search
-- [ ] Name entry screen (diegetic -- intake form)
-- [ ] Location data caching system
+That means preset-based targets need fundamentally different reassertion behavior than plain RGB targets, fire once on an actual state change, never repeatedly re-assert, rather than the interval-based re-fire every other target relies on for resilience. Worth designing into the Phase 2 coordinator deliberately, a per-target reassertion strategy rather than one global interval applied uniformly to everything. Not scoped for v1, and not a quick addition to v2 either, this needs its own design pass once the coordinator itself exists.
 
-**OSM Data Pipeline**
-- [ ] OSM API integration
-- [ ] Building footprint extraction and classification
-- [ ] Road network extraction
-- [ ] Land use data (residential, commercial, industrial, parks, water)
-- [ ] Point of interest extraction (hospitals, schools, gas stations)
-
-**Procedural Building Generation (PCG)**
-- [ ] Residential building generator (single family, multi-family, apartment)
-- [ ] Commercial building generator (store, office, restaurant)
-- [ ] Industrial building generator
-- [ ] Interior generation from footprint (navigable, survivable)
-- [ ] Building state system (intact, damaged, burned, collapsed)
-
-**Population Data Integration**
-- [ ] Census API or dataset integration
-- [ ] Zombie count calculation from real population
-- [ ] Population density driving zombie distribution
-- [ ] Zombie density variation (dense urban vs. sparse rural)
-
-**World State System**
-- [ ] Persistent world changes (cleared buildings stay cleared)
-- [ ] Resource depletion tracking
-- [ ] Environmental degradation over time
-
-### Milestone
-**Select St. Louis, Missouri. Walk through a recognizable version of downtown St. Louis with correct zombie density for a city of 2.8 million.**
+A follow-up request sharpened what the actual feature would look like: a calendar populated with holidays where each day or event can have a WLED preset assigned with its own start/end time, the calendar showing an indicator when a day has something assigned plus a color preview of that preset. Reasonable, specific UI shape, worth keeping for when this gets designed properly. One correction worth locking in now so it doesn't bake in wrong: selection has to go through the preset's name via `select.select_option`, not a preset number, the old numbered `wled.preset` service is deprecated.
 
 ---
 
-## PHASE 6: The Pre-Outbreak Window
-**Duration:** Months 30-42  
-**Goal:** The full emotional arc from calm through chaos to planning
+## Pagan and Wiccan observances, raised in feedback on Reddit
 
-### Systems to Build
+Eight events came up as a real gap in calendar coverage: the four fixed cross-quarter days, Imbolc, Beltane, Lughnasadh, and Samhain, plus the four solstices and equinoxes. The four fixed ones are simple, they're just calendar dates like everything else already in the system, no different in kind from any other single-day holiday.
 
-**Daily Life Simulation**
-- [ ] Character background generation (profession + hobby + social position)
-- [ ] Daily routine system (time slots, obligations, locations)
-- [ ] Time compression for mundane periods
-- [ ] Real-time moments for significant decisions
-- [ ] Obligation consequence system (miss work = lose pay, relationship damage)
+The solstices and equinoxes are the harder piece, since the actual moment shifts by a day or sometimes two each year depending on that year's specific orbital timing, not a fixed date the way Christmas or Independence Day are. Given ChromaCal's whole architecture is built around staying a single dependency-free file, computing the actual astronomical moment isn't the right approach here, that's real orbital mechanics, not the kind of date math already used for Easter or the Islamic calendar estimates. A hardcoded lookup table covering the next 20+ years is the right call instead, consistent with how the rest of the floating-date problem already gets solved in this codebase, and nobody's going to notice or care if that table needs refreshing sometime in the 2040s.
 
-**Discovered Identity System**
-- [ ] Personal item generation based on background
-- [ ] Character name from player input, discovered on ID
-- [ ] Memory fragment system (internal voice triggered by environment)
-- [ ] NPC who knows you encounter
-
-**Family and Social Dynamics**
-- [ ] Family composition generation (spectrum from nuclear to recluse)
-- [ ] Pre-outbreak relationship quality
-- [ ] Family response to outbreak information (believing, skeptical, denial)
-- [ ] Relationship consequence system
-
-**News and Information Escalation**
-- [ ] Information landscape simulation (Day 0 through window close)
-- [ ] Platform-appropriate information (radio, TV, phone)
-- [ ] Information reliability variation (some true, some false, some exaggerated)
-- [ ] Geographic information gradient (urban knows sooner)
-
-**The First Encounter Scenarios**
-- [ ] Dawn of the Dead scenario (immediate urban)
-- [ ] #Alive scenario (contained building)
-- [ ] Highway gridlock scenario
-- [ ] Workplace lockdown scenario
-- [ ] Domestic routine interrupted scenario
-- [ ] Rural delayed scenario
-
-**Organic Outbreak Spread**
-- [ ] Seed event placement (based on population density and transit)
-- [ ] Spread simulation through geographic logic
-- [ ] Neighborhood-level timing variation
-
-### Milestone
-**A player who picks their actual hometown and experiences the pre-outbreak window should feel the specific emotional weight of watching their real neighborhood change.**
+One real design question never got resolved and shouldn't get decided unilaterally here: whether the solstices and equinoxes should behave like every other single-day event, firing at sunset and running the normal color cycle until lights-off, or whether they should get the same extended, sacred-night treatment currently reserved for POW/MIA, Memorial Day, and the USMC Birthday. Worth deciding deliberately rather than defaulting to whichever's easier to implement first.
 
 ---
 
-## PHASE 7: NPC and Social Systems
-**Duration:** Months 36-48  
-**Goal:** NPCs that behave like people, not game characters
+A different kind of idea came up in the same feedback round: a real, configurable daily baseline routine, with holidays and awareness months surfacing as something you actively opt into or define yourself, rather than everything firing silently by default.
 
-### Systems to Build
+Worth knowing this is closer to the existing bones than it sounds. v1 already falls back to a literal default state on any night with nothing scheduled, a single fixed warm color running the same window the holiday colors would otherwise occupy. Making that baseline genuinely configurable instead of a hardcoded value is a clean improvement with no real downside, that part should just happen.
 
-**NPC Generation**
-- [ ] Profession + Hobby background system
-- [ ] Social position generation (family, recluse, spectrum)
-- [ ] Pre-existing reputation system
-- [ ] Psychological state generation and tracking
-- [ ] Cultural background (urban/rural, economic class)
+The "ask before applying" part is a real tradeoff, not a free addition, worth being honest about rather than just folding in. The entire pitch right now, the first thing the README says, is zero maintenance, and that's specifically what's gotten organic positive reaction so far. With 130+ events across a year, something new happens every two or three days on average, some weeks several stack at once. If every one needs an active decision, that's not zero maintenance anymore, it's an approval queue. The skip system works today because it's opt-out, assume yes and let people subtract what they don't want, not opt-in to everything.
 
-**Trust System**
-- [ ] Trust accumulation through consistent behavior
-- [ ] Trust destruction through betrayal
-- [ ] Reputation propagation through information network
-- [ ] Pre-outbreak reputation carrying forward
-
-**NPC Behavior**
-- [ ] Stress response profiles (externalizer, internalizer, rationalizer, etc.)
-- [ ] Voluntary departure system
-- [ ] Non-zombie death system (illness, injury, accident)
-- [ ] Bystander effect modeling (85% non-intervention)
-- [ ] Shared inaction social dynamics
-- [ ] The Trojan Horse scenario (false victim)
-
-**Community Dynamics**
-- [ ] Group formation and role assignment
-- [ ] Leadership credibility accumulation and decay
-- [ ] Faction formation within groups
-- [ ] Cultural bias probability system
-- [ ] Information network (survivor grapevine)
-- [ ] Parallel information networks (community-specific)
-
-**The Bite Scenario**
-- [ ] Virus progression timeline (extremity vs. core)
-- [ ] NPC concealment behavior
-- [ ] Amputation option and consequence
-- [ ] Psychological aftermath for group
-
-### Milestone
-**An NPC who was accepted into the group based on a sympathetic story is later revealed -- through a chance encounter with another group -- to have been ejected from their last group for specific reasons. The player runs back. What they find is determined by the simulation.**
+Right direction: keep full automatic as the untouched default. Add an optional mode, scoped per category rather than all-or-nothing, where someone could choose to be asked first specifically for, say, Awareness months, while Federal, Military, and Personal events stay fully automatic. Gets the agency where taste genuinely varies most, without turning the whole thing into something that needs constant attention.
 
 ---
 
-## PHASE 8: Rung 1 Integration and Polish
-**Duration:** Months 44-56  
-**Goal:** All systems working together, polished to Early Access quality
+**Phase 1, skeleton.** Minimal `custom_components/chromacal/` that HACS can install and HA can load: `manifest.json`, `__init__.py`, `config_flow.py` with a basic Add Integration wizard, one placeholder sensor entity. No scheduling logic yet. Goal is purely proving the packaging and loading mechanics work end to end before porting anything real into it.
 
-### Tasks
-- [ ] All systems integration testing
-- [ ] Performance profiling and optimization
-- [ ] Full audio design pass (all voice lines recorded, acoustic system tuned)
-- [ ] Full animation pass (fatigue expression, fight/flight/freeze, skill progression)
-- [ ] Pass the Torch system implementation
-- [ ] Steam page, description, and screenshots
-- [ ] Wishlist campaign (target: 6 months pre-launch)
-- [ ] Community building (Discord, dev logs, design posts)
-- [ ] Press and content creator outreach
-- [ ] Pricing strategy
-- [ ] Early Access launch
+**Phase 2, port the brain.** Move the holiday calendar (Easter, Islamic estimates, nth-weekday US holidays, the rest), split-night logic, and color style transforms from JavaScript into Python. Wire it to a `DataUpdateCoordinator` that recomputes the current phase on an interval and fires `light.turn_on`/`light.turn_off` directly, no REST, no token.
+
+**Phase 3, skip system and overrides as real entities.** Switches and services exposed through HA's own state machine, so skip toggles work from any dashboard, any voice assistant, any automation, not just from inside ChromaCal's own UI.
+
+**Phase 4, the Lovelace card.** Build `custom:chromacal-card` against the entities Phase 2 and 3 created. This is also where the full-panel-vs-card and visual-identity decisions actually get implemented, once they're made.
+
+**Phase 5, packaging for real distribution.** HACS validation requirements, manifest correctness, translations/strings.json for the config flow, possibly a brands repo submission for a proper icon.
+
+**Phase 6, release.** The Reddit announcement template already sitting in the v1 test checklist gets dusted off and updated for the real architecture.
 
 ---
 
-## Parallel Track: Content Production (Ongoing)
-
-The following content can be developed alongside any phase using AI collaboration:
-
-- [ ] Internal voice line database (thousands of contextual lines)
-- [ ] NPC dialogue system and line database
-- [ ] Lore documents (world history, outbreak origin, community histories)
-- [ ] Design philosophy posts for community building
-- [ ] Steam page copy and marketing materials
-- [ ] Technical specification documents for each system
-- [ ] Collaborator recruitment materials
-
----
-
-## Resource Requirements by Phase
-
-| Phase | Can Solo | Strongly Needs Collaborator |
-|-------|----------|-----------------------------|
-| 0 | Yes | No |
-| 1 | Yes | No |
-| 2 | Mostly | Audio designer for voice system |
-| 3 | Mostly | Audio engineer for MetaSounds |
-| 4 | Challenging | Voice actor/director for internal voice |
-| 5 | No | Technical artist for OSM/PCG pipeline |
-| 6 | Mostly | No |
-| 7 | No | AI/systems programmer |
-| 8 | No | Full small team |
-
----
-
-## Timeline Summary
-
-| Phase | Duration | Cumulative | Target Date |
-|-------|----------|------------|-------------|
-| 0: Foundation | 2 months | 2 months | Month 2 |
-| 1: Release .5 | 8 months | 10 months | Month 10 |
-| 2: Physical Systems | 8 months | 18 months | Month 18 |
-| 3: Acoustic Simulation | 12 months | 24 months | Month 24 |
-| 4: Diegetic Experience | 12 months | 30 months | Month 30 |
-| 5: Geographic Pipeline | 12 months | 36 months | Month 36 |
-| 6: Pre-Outbreak Window | 12 months | 42 months | Month 42 |
-| 7: NPC and Social | 12 months | 48 months | Month 48 |
-| 8: Integration and Polish | 8 months | 56 months | Month 56 |
-
-**Realistic Release 1.0 Early Access: Month 48-56 from serious development start**  
-**With strong collaborators: Month 36-44**  
-**With AI collaboration for non-engine tasks: Compress by 6-12 months**
-
----
-
-## The North Star
-
-Every decision, every feature addition, every timeline tradeoff gets checked against one question:
-
-**Does this produce the weight of being human?**
-
-If yes, build it.  
-If not, cut it.
-
----
-
-*Last updated: Initial document*  
-*Next review: After Phase 0 milestone achieved*
+*This file is meant to be updated as decisions get made and phases complete, not treated as fixed in stone.*
