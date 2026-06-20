@@ -2076,7 +2076,7 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
 //  github.com/TheRealApollyon/chromacal
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 // ── THEME SYSTEM ──────────────────────────────────────────────
 // Each theme maps to [bg, accent, amber] for the wizard preview
@@ -2512,7 +2512,13 @@ function getDesiredFireKey(now, light, segs) {
 async function fireScheduledCommand(key, light, segs, now) {
   if (!light?.entity || !CFG.haUrl || !CFG.token) return;
   const entity = light.entity;
-  const nowH   = now.getHours() + now.getMinutes()/60;
+  // Seconds included deliberately — dropping them (as the other nowH
+  // declarations in this file intentionally do, for coarse boundary checks
+  // where it doesn't matter) freezes this value for an entire 60s real-world
+  // window, which breaks color cycling: it can only advance once a minute
+  // instead of as intended, and combined with the cycle-duration fix below,
+  // accurate sub-minute timing is what makes that fix actually work.
+  const nowH   = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
   const fadeIn  = parseInt(light.fadeIn)  || 30;
   const fadeOut = parseInt(light.fadeOut) || 120;
   const cfgEnd  = (light?.endType==='time' && light?.endTime)
@@ -2549,12 +2555,23 @@ async function fireScheduledCommand(key, light, segs, now) {
         const [r,g,b] = hexToRgb(h);
         return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced');
       });
-      // For single-color events just set it; for multi-color, cycle them at 30s
+      // For single-color events just set it; for multi-color, cycle them at 60s
       // each — same cadence as the Test Tonight's Color loop. Computed from
       // elapsed time since this segment started rather than a counter, so it's
       // stateless and self-correcting no matter when this function gets called.
       const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
-      const colorIdx   = rgbs.length > 1 ? Math.floor(elapsedSec / 30) % rgbs.length : 0;
+      // 60s, not 30 — the Blueprint (the only thing that reliably re-fires
+      // colors over a sustained run) only re-triggers about once every 60
+      // real seconds, confirmed from its own automation history. Cycling
+      // at 30s against a ~60s real update rate means every observed sample
+      // advances 2 steps instead of 1, which for odd-length cycles (e.g. 3
+      // colors) shows the sequence in reverse, and for even-length cycles
+      // (e.g. Pride's 6 colors) permanently skips half the colors outright,
+      // since stepping by 2 splits the cycle into two separate loops. 60s
+      // makes each real update advance exactly 1 step, the only value that
+      // guarantees every color gets shown, in true order, regardless of how
+      // many colors an event has.
+      const colorIdx   = rgbs.length > 1 ? Math.floor(elapsedSec / 60) % rgbs.length : 0;
       const activeRgb  = rgbs[colorIdx];
       await lightOn(entity, {
         rgb_color: activeRgb,
@@ -2593,7 +2610,8 @@ async function fireScheduledCommand(key, light, segs, now) {
 //      HA startup, automation reloads, and reboots — not just on state change events
 async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
   if (!CFG.haUrl || !CFG.token || !light?.entity) return;
-  const nowH = now.getHours() + now.getMinutes()/60;
+  // Same fix as fireScheduledCommand above, and for the same reason.
+  const nowH = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
 
   const slug = (light.name || light.entity)
     .toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_|_$/g, '');
@@ -2637,7 +2655,8 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
       // rgb_color field stays correct too, not just the full rgb_colors array —
       // matters because the Blueprint may only read the single-color field.
       const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
-      const colorIdx    = rgbAll.length > 1 ? Math.floor(elapsedSec / 30) % rgbAll.length : 0;
+      // Same fix and same reasoning as fireScheduledCommand above.
+      const colorIdx    = rgbAll.length > 1 ? Math.floor(elapsedSec / 60) % rgbAll.length : 0;
       rgbFirst = rgbAll[colorIdx];
     }
   }
