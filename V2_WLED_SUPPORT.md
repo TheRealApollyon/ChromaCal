@@ -10,11 +10,24 @@ That matters for scope: plain RGB control of a WLED segment already works today,
 
 ## Detection
 
-When a light gets added in ChromaCal-v2, it checks Home Assistant's device registry to see whether that entity belongs to the WLED integration. If so, the light quietly gets WLED-aware behavior available to it. No manual toggle, no separate setup step.
+This needed to be precise, not just "checks the device registry," since that's not actually a mechanism, it's a description of one. The real, concrete steps, using standard Home Assistant helpers, nothing custom or fragile:
+
+1. Look the light entity up in the entity registry. Every registered entity carries a `config_entry_id`, the ID of whichever integration's setup created it.
+2. Resolve that config entry and check its `domain`. If it's literally `"wled"`, this light came from WLED. If not, treat it as a normal light, exactly like today.
+3. The same registry entry also carries a `device_id`, the physical device this entity belongs to. A single WLED controller can expose several entities, the segment's light entity, plus separate selector entities for presets, playlists, and palettes, all sharing that one device_id.
+4. Pull every entity that shares that device_id using Home Assistant's own `entity_registry.async_entries_for_device()` helper, the same mechanism the `device_entities()` template function uses under the hood. Filter that list for the one in the `select.` domain that represents presets.
+
+A real wrinkle worth specifying precisely rather than leaving implicit: WLED's integration translates entity names into whatever language Home Assistant is running in, so matching against the visible entity_id or friendly name isn't locale-safe, "preset" won't appear in the string on a non-English install. What does stay stable across languages is the `unique_id` suffix each select entity carries internally, `_preset`, `_playlist`, `_live_override`. That's the correct thing to match against, confirmed directly from a real WLED-integration bug report showing this exact suffix structure held steady even when the surrounding entity_id and friendly name were fully localized into Slovak.
+
+That's the whole detection chain, and every step is a documented, standard HA helper, not a workaround. Nothing about this is WLED-specific plumbing ChromaCal has to invent and maintain, it's the normal way any Home Assistant integration discovers sibling entities on the same device.
+
+When a light gets added in ChromaCal-v2, this check runs automatically and the light quietly gets WLED-aware behavior if it qualifies. No manual toggle, no separate setup step.
 
 ## Per-event preset assignment
 
-Extends the color-customization modal already shipped in v1 tonight. For a WLED-detected light specifically, the modal swaps the color swatch picker for a dropdown listing that device's actual current presets. The list is read fresh every time the modal opens, never cached, since presets live entirely on the WLED side and can change at any point outside ChromaCal's awareness.
+Extends the color-customization modal already shipped in v1 tonight. For a WLED-detected light specifically, the modal swaps the color swatch picker for a dropdown listing that device's actual current presets, sourced from the preset `select` entity found above. The list is read fresh every time the modal opens, never cached on ChromaCal's side.
+
+Worth being honest about what "fresh" actually guarantees, though. There's a real, currently open bug in Home Assistant's own WLED integration: it loads the preset list once, when it starts up, and doesn't refresh it afterward, so a preset just added in WLED's own app won't show up in Home Assistant until that integration gets manually reloaded. ChromaCal asking for the current state every time genuinely has no caching of its own, but that's not the same guarantee as reflecting a change made seconds ago in WLED, since that gap sits one layer up, in HA's integration, not somewhere ChromaCal can route around.
 
 ## Fallback behavior
 
