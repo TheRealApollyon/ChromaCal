@@ -24,6 +24,14 @@ A matched calendar event gets treated exactly like any other date-based ChromaCa
 
 That's a real, deliberate line, not a missing feature. Reacting to a calendar event's actual clock time, not just its date, is a genuinely different trigger model than anything currently in ChromaCal, and it overlaps directly with the custom timeline builder already flagged as its own dedicated piece of work, not something to fold in here. Calendar sync's job is supplying a new source of dates. Deciding what happens at exactly what time of day is the other project's territory.
 
+## What's actually built, and the honest line around it
+
+`calendar_sync.py`, included alongside this document, splits cleanly into two pieces with two different verification stories.
+
+The matching and merging logic, deciding which calendar events have an assigned color, attaching it, folding the result into the same unified list holidays already live in, is pure logic with no Home Assistant dependency at all. Fully testable in isolation, and fully tested: ten checks covering exact matching, case-insensitivity, whitespace handling, two separate instances of the same recurring event both matching independently, unmapped events correctly staying excluded, and the merge producing a properly sorted, correctly source-tagged result. All ten pass.
+
+The actual live call to `calendar.get_events` is specified correctly against the documented API, `blocking=True` and `return_response=True` both have to be set together to get real event data back, confirmed against multiple independent sources including real bug reports from people who forgot one of the two flags, a genuinely easy mistake otherwise. But it's not something that could be tested here, since it needs a live Home Assistant instance with a real connected calendar to actually run against. Worth being upfront about that boundary rather than blur it, the same way the WLED firing mechanism will need real hardware before it's fully proven, not just well-specified.
+
 ## Open, not yet decided
 
 **Multiple calendars at once.** `calendar.get_events` already supports targeting more than one calendar entity in a single call, so nothing technical blocks this. Starting with one calendar is the simpler default, worth deciding deliberately whether multi-calendar support is a real v1-of-this-feature requirement or a later addition.
