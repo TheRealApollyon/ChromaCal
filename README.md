@@ -208,4 +208,4 @@ Issues and PRs welcome. Use **Settings → Feedback → Report a Bug** inside Ch
 
 MIT — do whatever you want, attribution appreciated.
 
-*ChromaCal v1.0.0 — Honor your heritage. Light your home.*
+*ChromaCal v1.0.2 — Honor your heritage. Light your home.*
