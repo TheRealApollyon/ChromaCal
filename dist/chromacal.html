@@ -668,6 +668,14 @@ header {
 }
 .ev-tonight-skip:hover { border-color: var(--purple); color: var(--purple); opacity: 1; }
 .ev-tonight-skip.active { border-color: var(--purple); color: var(--purple); background: rgba(139,0,204,.12); opacity: 1; }
+/* Customize colors (🎨) — every event, any day */
+.ev-color-btn {
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: 13px; cursor: pointer;
+  transition: all .15s; flex-shrink: 0; opacity: .6;
+}
+.ev-color-btn:hover { border-color: var(--cyan); opacity: 1; }
+.ev-color-btn.customized { border-color: var(--cyan); background: rgba(0,200,232,.12); opacity: 1; }
 
 /* Phase list rows in tonight-box */
 .tb-row .tb-icon { width: 18px; flex-shrink: 0; font-size: 13px; }
@@ -2045,6 +2053,30 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
   </div>
 </div>
 
+<!-- Customize Event Colors Modal -->
+<div class="modal-overlay" id="modal-event-colors">
+  <div class="modal">
+    <div class="modal-title">CUSTOMIZE COLORS</div>
+    <div class="field">
+      <label id="evc-event-name" style="color:var(--text);font-weight:600"></label>
+    </div>
+    <div class="field">
+      <label>Color(s) — click to add, click a chip to remove</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="color" id="evc-color-picker" value="#FF69B4" style="width:40px;height:32px;cursor:pointer">
+        <button class="btn btn-ghost btn-sm" onclick="addEvColor()">+ Add Color</button>
+        <div id="evc-chips" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Multiple colors cycle every 30 seconds while this event is running, same as any built-in multi-color event.</div>
+    </div>
+    <div class="wz-btns">
+      <button class="btn btn-ghost" onclick="resetEventColorOverride()">Reset to Default</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-event-colors')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEventColorOverride()">Save Colors</button>
+    </div>
+  </div>
+</div>
+
 <!-- Override Modal -->
 <div class="modal-overlay" id="modal-override">
   <div class="modal">
@@ -2303,6 +2335,7 @@ const DEFAULT_CONFIG = {
   theme: 'daylight',
   customAccent: '#2563EB',
   categories: {},
+  colorOverrides: {}, // { 'Event Name': ['#hex', '#hex', ...] } — user-customized colors, takes priority over built-in defaults
   lights: [],
   personalEvents: [],
   emergencyPattern: 'red-blue',
@@ -2396,7 +2429,7 @@ const US_HOLIDAYS = [
   {m:2,  d1:16, d2:16, name:"Presidents' Day",              cat:'federal',  icon:'🦅', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday', note:'ANNUAL 3rd Mon Feb'},
   {m:5,  d1:25, d2:25, name:'Memorial Day',                 cat:'military', icon:'🇺🇸', colors:['#DC143C','#FFFFFF','#0032D2'], type:'vigil',   note:'ANNUAL last Mon May'},
   {m:6,  d1:14, d2:14, name:'Flag Day',                     cat:'federal',  icon:'🚩', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday'},
-  {m:6,  d1:19, d2:19, name:'Juneteenth',                   cat:'federal',  icon:'✊', colors:['#DC143C','#000000','#009614'], type:'holiday'},
+  {m:6,  d1:19, d2:19, name:'Juneteenth',                   cat:'federal',  icon:'✊', colors:['#B22234','#FFFFFF','#3C3B6E'], type:'holiday'},
   {m:7,  d1:4,  d2:4,  name:'Independence Day',             cat:'federal',  icon:'🎇', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday'},
   {m:9,  d1:7,  d2:7,  name:'Labor Day',                    cat:'federal',  icon:'⚒️', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday', note:'ANNUAL 1st Mon Sep'},
   {m:10, d1:12, d2:12, name:'Indigenous Peoples Day',       cat:'heritage', icon:'🪶', colors:['#8B2500','#FFD700','#228B22'], type:'holiday', note:'ANNUAL 2nd Mon Oct'},
@@ -2512,7 +2545,14 @@ function getDesiredFireKey(now, light, segs) {
 async function fireScheduledCommand(key, light, segs, now) {
   if (!light?.entity || !CFG.haUrl || !CFG.token) return;
   const entity = light.entity;
-  const nowH   = now.getHours() + now.getMinutes()/60;
+  // Seconds included deliberately — dropping them (as the other nowH
+  // declarations in this file intentionally do, for coarse boundary checks
+  // where it doesn't matter) freezes this value for an entire 60s real-world
+  // window, which breaks 30s color cycling: it can only advance once a
+  // minute instead of twice, and because 60s of "real" advancement maps to
+  // 2 steps in a 3-color cycle, which is mathematically equivalent to
+  // stepping backward 1, the displayed order comes out reversed.
+  const nowH   = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
   const fadeIn  = parseInt(light.fadeIn)  || 30;
   const fadeOut = parseInt(light.fadeOut) || 120;
   const cfgEnd  = (light?.endType==='time' && light?.endTime)
@@ -2549,12 +2589,23 @@ async function fireScheduledCommand(key, light, segs, now) {
         const [r,g,b] = hexToRgb(h);
         return applyIntensity([r,g,b], light.intensityOverride || CFG.lightingStyle || 'balanced');
       });
-      // For single-color events just set it; for multi-color, cycle them at 30s
+      // For single-color events just set it; for multi-color, cycle them at 60s
       // each — same cadence as the Test Tonight's Color loop. Computed from
       // elapsed time since this segment started rather than a counter, so it's
       // stateless and self-correcting no matter when this function gets called.
       const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
-      const colorIdx   = rgbs.length > 1 ? Math.floor(elapsedSec / 30) % rgbs.length : 0;
+      // 60s, not 30 — the Blueprint (the only thing that reliably re-fires
+      // colors over a sustained run) only re-triggers about once every 60
+      // real seconds, confirmed from its own automation history. Cycling
+      // at 30s against a ~60s real update rate means every observed sample
+      // advances 2 steps instead of 1, which for odd-length cycles (e.g. 3
+      // colors) shows the sequence in reverse, and for even-length cycles
+      // (e.g. Pride's 6 colors) permanently skips half the colors outright,
+      // since stepping by 2 splits the cycle into two separate loops. 60s
+      // makes each real update advance exactly 1 step, the only value that
+      // guarantees every color gets shown, in true order, regardless of how
+      // many colors an event has.
+      const colorIdx   = rgbs.length > 1 ? Math.floor(elapsedSec / 60) % rgbs.length : 0;
       const activeRgb  = rgbs[colorIdx];
       await lightOn(entity, {
         rgb_color: activeRgb,
@@ -2593,7 +2644,10 @@ async function fireScheduledCommand(key, light, segs, now) {
 //      HA startup, automation reloads, and reboots — not just on state change events
 async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
   if (!CFG.haUrl || !CFG.token || !light?.entity) return;
-  const nowH = now.getHours() + now.getMinutes()/60;
+  // Same fix as fireScheduledCommand above, and for the same reason — this
+  // nowH feeds the elapsedSec/colorIdx math for color cycling, which needs
+  // true sub-minute precision, unlike most other nowH uses in this file.
+  const nowH = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
 
   const slug = (light.name || light.entity)
     .toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/_+/g, '_').replace(/^_|_$/g, '');
@@ -2637,7 +2691,10 @@ async function syncBridgeHelper(key, light, segs, now, forceSync = false) {
       // rgb_color field stays correct too, not just the full rgb_colors array —
       // matters because the Blueprint may only read the single-color field.
       const elapsedSec = Math.max(0, (nowH - seg.startH) * 3600);
-      const colorIdx    = rgbAll.length > 1 ? Math.floor(elapsedSec / 30) % rgbAll.length : 0;
+      // Same fix and same reasoning as fireScheduledCommand above — 60s
+      // matches the Blueprint's real re-trigger cadence, the only value
+      // that guarantees every color in the cycle actually gets shown.
+      const colorIdx    = rgbAll.length > 1 ? Math.floor(elapsedSec / 60) % rgbAll.length : 0;
       rgbFirst = rgbAll[colorIdx];
     }
   }
@@ -2926,7 +2983,10 @@ function getEnabledHolidays() {
   const overrides = _floatCache[key] || {};
   const base = REGION_CALENDARS[CFG.region] || US_HOLIDAYS;
   const resolved = base.map(h => overrides[h.name] ? {...h, ...overrides[h.name]} : h);
-  return [...resolved, ...GLOBAL_FLOATING].filter(h => CFG.categories[h.cat]);
+  const merged = [...resolved, ...GLOBAL_FLOATING].filter(h => CFG.categories[h.cat]);
+  // Apply user color overrides last, so they win regardless of which list an event came from
+  const colorOverrides = CFG.colorOverrides || {};
+  return merged.map(h => colorOverrides[h.name] ? {...h, colors: colorOverrides[h.name]} : h);
 }
 // ── SPLIT-NIGHT SCHEDULE ENGINE ──────────────────────────────────────────────
 // Returns array of { event, startH, endH } segments for tonight.
@@ -3872,10 +3932,15 @@ function renderUpcoming(now) {
 
     let pickBtn = '';
 
+    // 🎨 Customize colors — every event, any day, not just today
+    const hasOverride = !!(CFG.colorOverrides && CFG.colorOverrides[ev.name]);
+    const colorsJson = JSON.stringify(ev.colors || []).replace(/"/g, '&quot;');
+    pickBtn += '<button class="ev-color-btn' + (hasOverride?' customized':'') + '" data-evname="' + safeName + '" data-colors="' + colorsJson + '" onclick="openEventColorModal(this)" title="' + (hasOverride ? 'Customized — click to edit' : 'Customize colors for this event') + '">🎨</button>';
+
     // ★ Tonight's Pick — today only, not when either skip type is active
     if (ev.isToday && !isSkipped && light) {
       const isPicked = tonightPick === ev.name;
-      pickBtn = '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" data-pickname="' + safeName + '" onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
+      pickBtn += '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" data-pickname="' + safeName + '" onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
         + (isPicked ? '\u2605' : '\u2606') + '</button>';
     }
 
@@ -4818,6 +4883,58 @@ function renderPeChips() {
 function removePeColor(idx) {
   selectedPeColors.splice(idx,1);
   renderPeChips();
+}
+
+// ── EVENT COLOR CUSTOMIZATION ────────────────────────────────────────────
+// Lets a user override the built-in color set for ANY event by name.
+// Storage: CFG.colorOverrides[eventName] = ['#hex', ...], applied once in
+// getEnabledHolidays() so every part of the app that reads event.colors
+// picks it up automatically — no other call site needs to know this exists.
+let selectedEvColors = [];
+let _editingEventName = '';
+
+function openEventColorModal(btn) {
+  _editingEventName = btn.dataset.evname;
+  const current = CFG.colorOverrides?.[_editingEventName] || JSON.parse(btn.dataset.colors.replace(/&quot;/g,'"'));
+  selectedEvColors = [...current];
+  document.getElementById('evc-event-name').textContent = _editingEventName;
+  renderEvChips();
+  openModal('modal-event-colors');
+}
+
+function addEvColor() {
+  const c = document.getElementById('evc-color-picker').value;
+  if (selectedEvColors.length < 6) {
+    selectedEvColors.push(c);
+    renderEvChips();
+  }
+}
+function renderEvChips() {
+  document.getElementById('evc-chips').innerHTML = selectedEvColors.map((c,i)=>
+    `<div class="chip" style="background:${c};cursor:pointer;width:22px;height:22px" onclick="removeEvColor(${i})" title="Click to remove"></div>`
+  ).join('');
+}
+function removeEvColor(idx) {
+  selectedEvColors.splice(idx,1);
+  renderEvChips();
+}
+function saveEventColorOverride() {
+  if (selectedEvColors.length === 0) { alert('Add at least one color.'); return; }
+  if (!CFG.colorOverrides) CFG.colorOverrides = {};
+  CFG.colorOverrides[_editingEventName] = selectedEvColors;
+  saveConfig();
+  closeModal('modal-event-colors');
+  addLog(`🎨 Colors customized: ${_editingEventName}`, 'ok');
+  if (settingsViewActive) renderSettingsTab();
+  update();
+}
+function resetEventColorOverride() {
+  if (CFG.colorOverrides) delete CFG.colorOverrides[_editingEventName];
+  saveConfig();
+  closeModal('modal-event-colors');
+  addLog(`🎨 Colors reset to default: ${_editingEventName}`, 'info');
+  if (settingsViewActive) renderSettingsTab();
+  update();
 }
 function savePersonalEvent() {
   const name      = document.getElementById('pe-name').value.trim();
