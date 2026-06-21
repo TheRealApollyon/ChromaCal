@@ -116,7 +116,7 @@ Security lighting before lights-off. Configurable Kelvin:
 
 **International:** Canada, UK, Australia, EU, APAC, Latin America, global Islamic/Jewish/Hindu/Lunar floating calendar
 
-**All floating dates computed algorithmically** — Easter (Meeus/Jones/Butcher), US nthWeekday holidays, Islamic calendar estimates, Jewish calendar. Verified correct 2024–2030.
+**All floating dates computed algorithmically** — Easter (Meeus/Jones/Butcher), US nthWeekday holidays, Islamic calendar estimates, Jewish calendar, solstices and equinoxes (Pagan & Wiccan, Beta). Verified correct 2024–2031.
 
 ---
 
