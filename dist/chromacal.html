@@ -643,20 +643,20 @@ header {
 /* Running/pick/queued badges in upcoming list */
 .ev-running-badge {
   font-size: 10px; font-weight: 700; color: var(--green); background: rgba(0,200,80,.12);
-  border: 1px solid var(--green); border-radius: 4px; padding: 1px 6px; margin-left: 6px;
-  letter-spacing: .3px;
+  border: 1px solid var(--green); border-radius: 4px; padding: 1px 6px;
+  letter-spacing: .3px; white-space: nowrap;
 }
 .ev-queued-badge {
   font-size: 10px; color: var(--cyan); background: rgba(0,200,232,.08);
-  border: 1px solid rgba(0,200,232,.3); border-radius: 4px; padding: 1px 6px; margin-left: 6px;
+  border: 1px solid rgba(0,200,232,.3); border-radius: 4px; padding: 1px 6px; white-space: nowrap;
 }
 .ev-standby-badge {
-  font-size: 10px; color: var(--muted); padding: 1px 6px; margin-left: 6px;
+  font-size: 10px; color: var(--muted); padding: 1px 6px; white-space: nowrap;
 }
 .ev-pick-btn {
   padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border);
   background: transparent; color: var(--muted); font-size: 13px; cursor: pointer;
-  transition: all .15s; flex-shrink: 0;
+  transition: all .15s; flex-shrink: 0; margin-top: 1px;
 }
 .ev-pick-btn:hover { border-color: var(--amber); color: var(--amber); }
 .ev-pick-btn.picked { border-color: var(--amber); color: var(--amber); background: rgba(251,191,36,.1); }
@@ -664,10 +664,18 @@ header {
 .ev-tonight-skip {
   padding: 2px 5px; border-radius: 5px; border: 1px solid var(--border);
   background: transparent; color: var(--muted); font-size: 12px; cursor: pointer;
-  transition: all .15s; flex-shrink: 0; opacity: .5;
+  transition: all .15s; flex-shrink: 0; opacity: .5; margin-top: 1px;
 }
 .ev-tonight-skip:hover { border-color: var(--purple); color: var(--purple); opacity: 1; }
 .ev-tonight-skip.active { border-color: var(--purple); color: var(--purple); background: rgba(139,0,204,.12); opacity: 1; }
+/* Customize colors (🎨) — every event, any day */
+.ev-color-btn {
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: 13px; cursor: pointer;
+  transition: all .15s; flex-shrink: 0; opacity: .6; margin-top: 1px;
+}
+.ev-color-btn:hover { border-color: var(--cyan); opacity: 1; }
+.ev-color-btn.customized { border-color: var(--cyan); background: rgba(0,200,232,.12); opacity: 1; }
 
 /* Phase list rows in tonight-box */
 .tb-row .tb-icon { width: 18px; flex-shrink: 0; font-size: 13px; }
@@ -951,7 +959,7 @@ header {
 .edit-light-btn:hover { background: rgba(0,200,232,.14); border-color: var(--cyan); }
 .sm-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 .ev-row {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: flex-start; gap: 8px;
   padding: 8px 10px;
   background: var(--s2);
   border: 1.5px solid var(--border);
@@ -961,15 +969,17 @@ header {
 }
 .ev-row.today { border-color: var(--cyan); background: var(--s3); }
 .ev-row.skipped { opacity: .4; }
-.ev-date { font-size: 10px; color: var(--muted); width: 72px; flex-shrink: 0; font-weight: 500; line-height: 1.2; }
-.ev-icon { font-size: 18px; flex-shrink: 0; }
-.ev-name { flex: 1; font-size: 12px; color: var(--text); font-weight: 500; line-height: 1.3; }
-.ev-chips { display: flex; gap: 4px; }
+.ev-date { font-size: 10px; color: var(--muted); width: 72px; flex-shrink: 0; font-weight: 500; line-height: 1.2; padding-top: 3px; }
+.ev-icon { font-size: 18px; flex-shrink: 0; line-height: 1; padding-top: 1px; }
+.ev-name { flex: 1; font-size: 12px; color: var(--text); font-weight: 500; line-height: 1.3; padding-top: 2px; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 3px; min-width: 0; }
+.ev-name-text { min-width: 0; }
+.ev-chips { display: flex; gap: 4px; padding-top: 4px; }
 .ev-chip { width: 12px; height: 12px; border-radius: 3px; }
 .ev-badge {
   font-size: 10px; padding: 3px 10px; border-radius: 20px;
   background: rgba(74,96,128,.2); color: var(--text2); flex-shrink: 0; font-weight: 700;
   white-space: nowrap; letter-spacing: .6px; text-transform: uppercase; border: 1px solid transparent;
+  margin-top: 1px;
 }
 /* Type-specific badge colors — slightly tinted background + matching border */
 .ev-badge.holiday  { background: rgba(37,99,235,.15);  color:#6BA3F5; border-color:rgba(37,99,235,.25); }
@@ -992,6 +1002,7 @@ header {
   background: transparent; color: var(--muted); font-size: 14px; flex-shrink: 0;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: border-color .2s, color .2s, background .2s;
+  margin-top: 1px;
 }
 .ev-skip-btn:hover { border-color: var(--red); color: var(--red); }
 .ev-skip-btn.skipped { border-color: var(--red); color: var(--red); background: rgba(244,63,94,.1); }
@@ -1766,12 +1777,23 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
         <button class="qc-btn" onclick="forceLightsOff()">
           <span class="qc-icon">⏹️</span>Turn Off Now
         </button>
+        <button class="qc-btn" id="sync-now-btn-main" onclick="forceSyncAllBridges()" title="Force-recompute and re-push the correct state to your lights — use this if ChromaCal and your actual lights ever drift out of sync, like after a refresh during a fade-in">
+          <span class="qc-icon">🔄</span>Catch Up / Sync
+        </button>
       </div>
 
       <!-- 21 Gun Salute — Military Tribute quick action -->
-      <button class="qc-btn" id="btn-salute" onclick="fire21GunSalute()" style="width:100%;margin-bottom:12px;border-color:rgba(60,59,110,.6);color:var(--text2)" title="Fire 3 volleys of 7 white flashes, then resume the schedule — a 21-gun salute in light">
-        <span class="qc-icon">🎖️</span>21 Gun Salute <span style="font-size:10px;color:var(--muted);margin-left:4px">· 3 volleys × 7 · white flash</span>
+      <button class="qc-btn" id="btn-salute" onclick="fire21GunSalute()" style="width:100%;margin-bottom:8px;border-color:rgba(60,59,110,.6);color:var(--text2)" title="Three volleys, each a white flash and red afterglow, then a somber Taps close before resuming the schedule">
+        <span class="qc-icon">🎖️</span>21 Gun Salute <span style="font-size:10px;color:var(--muted);margin-left:4px">· 3 volleys + Taps</span>
       </button>
+      <div class="solidarity-row" style="margin-bottom:12px">
+        <label>Pace</label>
+        <select id="salute-pace-select" onchange="CFG.salutePace = this.value; saveConfig();">
+          <option value="fast">Fast — ~40s</option>
+          <option value="standard" selected>Standard — ~58s</option>
+          <option value="slow">Slow / Ceremonial — ~74s</option>
+        </select>
+      </div>
 
       <div class="card-label" style="margin-top:8px">▸ Emergency</div>
       <button class="emg-big" id="emg-btn" onclick="toggleEmergency()">
@@ -1779,10 +1801,22 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
       </button>
       <div class="emg-opts" id="emg-opts">
         <button class="emg-opt selected" data-pattern="red-blue" onclick="selectEmgPattern(this)">🔴🔵 Red/Blue (US)</button>
-        <button class="emg-opt" data-pattern="blue" onclick="selectEmgPattern(this)">🔵 Blue (EU)</button>
+        <button class="emg-opt" data-pattern="blue" onclick="selectEmgPattern(this)">🔵⚪ Blue/White (EU)</button>
         <button class="emg-opt" data-pattern="amber" onclick="selectEmgPattern(this)">🟡 Amber</button>
         <button class="emg-opt" data-pattern="red-white" onclick="selectEmgPattern(this)">🔴⚪ Red/White</button>
       </div>
+      <div class="solidarity-row">
+        <label>Flash speed</label>
+        <select id="emg-interval-select" onchange="CFG.emergencyInterval = parseInt(this.value); saveConfig();">
+          <option value="3000">3s — fastest, needs a clean mesh</option>
+          <option value="5000" selected>5s — default</option>
+          <option value="8000">8s</option>
+          <option value="12000">12s</option>
+          <option value="20000">20s</option>
+          <option value="30000">30s — slowest, most reliable</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">If you're seeing dropped or stuck colors during Emergency Mode, your mesh needs more breathing room between commands — try a slower speed.</div>
       <div class="solidarity-row">
         <label>Solidarity color</label>
         <input type="color" id="solidarity-color" value="#dc143c">
@@ -1834,7 +1868,7 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
 
   <footer>
     <strong style="color:var(--cyan)">Honor your heritage. Light your home.</strong> &nbsp;·&nbsp;
-    ChromaCal v1.0.0 &nbsp;·&nbsp;
+    ChromaCal <span id="footer-ver">v1.0.0</span> &nbsp;·&nbsp;
     <a href="https://github.com/TheRealApollyon/chromacal" target="_blank">GitHub</a>
     &nbsp;·&nbsp; <span id="footer-clock"></span>
   </footer>
@@ -1986,6 +2020,12 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
         <option value="bold">Bold</option>
       </select>
     </div>
+    <div class="field">
+      <label>Whole-House Broadcasts</label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Emergency Mode and the Salute can fire on every participating light at once. Uncheck for zones that shouldn't join in, like a back yard light when Emergency Mode is meant to help responders spot the front of the house.</div>
+      <label style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><input type="checkbox" id="ml-in-emergency" checked style="width:auto"> Include in Emergency Mode</label>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ml-in-salute" checked style="width:auto"> Include in the Salute</label>
+    </div>
     <div class="wz-btns">
       <button class="btn btn-ghost" onclick="closeModal('modal-light')">Cancel</button>
       <button class="btn btn-primary" onclick="saveLight()">Save Light</button>
@@ -2045,6 +2085,30 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
   </div>
 </div>
 
+<!-- Customize Event Colors Modal -->
+<div class="modal-overlay" id="modal-event-colors">
+  <div class="modal">
+    <div class="modal-title">CUSTOMIZE COLORS</div>
+    <div class="field">
+      <label id="evc-event-name" style="color:var(--text);font-weight:600"></label>
+    </div>
+    <div class="field">
+      <label>Color(s) — click to add, click a chip to remove</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="color" id="evc-color-picker" value="#FF69B4" style="width:40px;height:32px;cursor:pointer">
+        <button class="btn btn-ghost btn-sm" onclick="addEvColor()">+ Add Color</button>
+        <div id="evc-chips" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Multiple colors cycle every 60 seconds while this event is running, same as any built-in multi-color event.</div>
+    </div>
+    <div class="wz-btns">
+      <button class="btn btn-ghost" onclick="resetEventColorOverride()">Reset to Default</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-event-colors')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEventColorOverride()">Save Colors</button>
+    </div>
+  </div>
+</div>
+
 <!-- Override Modal -->
 <div class="modal-overlay" id="modal-override">
   <div class="modal">
@@ -2076,7 +2140,7 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
 //  github.com/TheRealApollyon/chromacal
 // ═══════════════════════════════════════════════════════════════
 
-const VERSION = '1.0.2';
+const VERSION = '1.1.0';
 
 // ── THEME SYSTEM ──────────────────────────────────────────────
 // Each theme maps to [bg, accent, amber] for the wizard preview
@@ -2277,6 +2341,11 @@ const GLOBAL_FLOATING = [
   {m:4,  d1:13, d2:20, name:'Passover (Pesach)',         cat:'religious',icon:'✡️', colors:['#003CB3','#FFFFFF','#FFD700'], type:'awareness',note:'ANNUAL 8 days, varies Apr'},
   {m:10, d1:20, d2:26, name:'Diwali',                    cat:'religious',icon:'🪔', colors:['#FF8C00','#FFD700','#FF5000'], type:'holiday', note:'ANNUAL Oct-Nov varies'},
   {m:12, d1:4,  d2:12, name:'Hanukkah',                  cat:'religious',icon:'🕎', colors:['#003CB3','#FFFFFF','#C0C0C8'], type:'awareness',note:'ANNUAL Nov-Dec varies (8 nights)'},
+  // Pagan/Wiccan cross-quarter days — fixed dates, always standard (single-evening) treatment.
+  {m:2,  d1:1,  d2:1,  name:'Imbolc',                   cat:'pagan',    icon:'🕯️', colors:['#FFFFFF','#8FBC8F'],           type:'holiday', note:'ANNUAL Feb 1 — Brigid\'s flame, purification, first stirrings of spring'},
+  {m:5,  d1:1,  d2:1,  name:'Beltane',                  cat:'pagan',    icon:'🔥', colors:['#E63946','#52B788','#FFB5C5'], type:'holiday', note:'ANNUAL May 1 — fire festival, fertility, the bright half of the year'},
+  {m:8,  d1:1,  d2:1,  name:'Lughnasadh',                cat:'pagan',    icon:'🌾', colors:['#D4A017','#8B5A2B'],           type:'holiday', note:'ANNUAL Aug 1 — first harvest, grain, gratitude'},
+  {m:10, d1:31, d2:31, name:'Samhain',                  cat:'pagan',    icon:'🍂', colors:['#1A1A1A','#FF7518','#4B0082'], type:'holiday', note:'ANNUAL Oct 31 — end of harvest, ancestor veneration, the veil thins'},
 ];
 // Per-category colors for calendar grid bars and legend.
 // Using CATEGORY colors (not event-specific) so the calendar is scannable at a glance.
@@ -2288,6 +2357,7 @@ const CAT_COLORS = {
   pride:     '#CC44FF', // bright electric purple — clearly distinct from military red
   awareness: '#007E88', // teal
   religious: '#A07800', // gold
+  pagan:     '#5C8A3A', // moss green — distinct from heritage emerald and military green
   personal:  '#CC3377', // pink
 };
 function catColor(cat) { return CAT_COLORS[cat] || '#666'; }
@@ -2307,6 +2377,8 @@ const DEFAULT_CONFIG = {
   personalEvents: [],
   emergencyPattern: 'red-blue',
   lightingStyle: 'balanced',
+  paganExtendedNights: false, // false=standard single-evening, true=sacred-night (extends to ~1am) for the 4 solstices/equinoxes
+  colorOverrides: {}, // { 'Event Name': ['#hex', '#hex', ...] } — user-customized colors, takes priority over built-in defaults
   skippedEvents: [],   // permanent skips — stay off until manually re-enabled
   tonightSkips: {},    // date-keyed: {YYYY-MM-DD: [names]} — auto-resets next day
   notifyService: '',   // HA notification service (e.g. mobile_app_my_phone)
@@ -2385,6 +2457,7 @@ const CATEGORIES = {
   pride:     { name:'Pride & LGBTQ+ Events',          desc:'Pride Month — rainbow cycle (June)',           icon:'🏳️‍🌈', color:'#f472b6' },
   awareness: { name:'Health & Awareness Months',      desc:'Suicide Prevention, Breast Cancer, Autism, Domestic Violence…', icon:'💙', color:'#60a5fa' },
   religious: { name:'Religious Observances',          desc:'Christmas, Easter, Hanukkah…',                icon:'✨', color:'#fbbf24' },
+  pagan:     { name:'Pagan & Wiccan Observances (Beta)', desc:'Wheel of the Year — sabbats, solstices, equinoxes', icon:'🌿', color:'#5C8A3A' },
   personal:  { name:'Personal Events',               desc:'Birthdays, anniversaries, your own occasions', icon:'🎂', color:'#f472b6' }
 };
 
@@ -2396,7 +2469,7 @@ const US_HOLIDAYS = [
   {m:2,  d1:16, d2:16, name:"Presidents' Day",              cat:'federal',  icon:'🦅', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday', note:'ANNUAL 3rd Mon Feb'},
   {m:5,  d1:25, d2:25, name:'Memorial Day',                 cat:'military', icon:'🇺🇸', colors:['#DC143C','#FFFFFF','#0032D2'], type:'vigil',   note:'ANNUAL last Mon May'},
   {m:6,  d1:14, d2:14, name:'Flag Day',                     cat:'federal',  icon:'🚩', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday'},
-  {m:6,  d1:19, d2:19, name:'Juneteenth',                   cat:'federal',  icon:'✊', colors:['#DC143C','#000000','#009614'], type:'holiday'},
+  {m:6,  d1:19, d2:19, name:'Juneteenth',                   cat:'federal',  icon:'✊', colors:['#B22234','#FFFFFF','#3C3B6E'], type:'holiday'},
   {m:7,  d1:4,  d2:4,  name:'Independence Day',             cat:'federal',  icon:'🎇', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday'},
   {m:9,  d1:7,  d2:7,  name:'Labor Day',                    cat:'federal',  icon:'⚒️', colors:['#DC143C','#FFFFFF','#0032D2'], type:'holiday', note:'ANNUAL 1st Mon Sep'},
   {m:10, d1:12, d2:12, name:'Indigenous Peoples Day',       cat:'heritage', icon:'🪶', colors:['#8B2500','#FFD700','#228B22'], type:'holiday', note:'ANNUAL 2nd Mon Oct'},
@@ -2481,6 +2554,7 @@ let sunsetH = null; // cached sunset hour for tonight (decimal, e.g. 20.48 = 20:
 // Format: "event:EventName" | "warmwhite" | "off" | "pre"
 let _lastFireKey  = {};  // lightName → last fired key
 let _schedOverride = {}; // lightName → {until: Date, reason: string} (manual override suppresses auto)
+let _loggedExternalOverride = false; // throttles the external-override log line to once per activation, not every 30s
 const OVERRIDE_MINS = 30; // manual overrides suppress auto-fire for 30 minutes
 
 // ── BRIDGE CACHE ──────────────────────────────────────────────────────────────
@@ -2718,18 +2792,19 @@ function setManualOverride(lightName, reason) {
 
 // Force-sync all bridge helpers — useful after HA restart or manual verification
 async function forceSyncAllBridges() {
-  const btn = document.getElementById('sync-now-btn');
-  if (btn) { btn.textContent = '⟳ Syncing...'; btn.disabled = true; }
+  const btns = [document.getElementById('sync-now-btn'), document.getElementById('sync-now-btn-main')];
+  btns.forEach(btn => { if (btn) { btn.dataset.origText = btn.dataset.origText || btn.innerHTML; btn.innerHTML = btn.innerHTML.includes('qc-icon') ? '<span class="qc-icon">⟳</span>Syncing...' : '⟳ Syncing...'; btn.disabled = true; } });
   const now = new Date();
   for (const light of CFG.lights) {
     const segs = getNightSegments(now, light);
     const key  = getDesiredFireKey(now, light, segs);
     await syncBridgeHelper(key, light, segs, now, true);
   }
-  if (btn) {
-    btn.textContent = '✅ Synced!';
-    setTimeout(() => { btn.textContent = '🔗 Sync Now'; btn.disabled = false; }, 2000);
-  }
+  btns.forEach(btn => {
+    if (!btn) return;
+    btn.innerHTML = btn.dataset.origText.includes('qc-icon') ? '<span class="qc-icon">✅</span>Synced!' : '✅ Synced!';
+    setTimeout(() => { btn.innerHTML = btn.dataset.origText; btn.disabled = false; }, 2000);
+  });
 }
 
 // Auto-detect light entities from HA and populate the dropdown in the light modal
@@ -2790,6 +2865,7 @@ async function fetchSunset() {
 let pollTimer = null;
 let emgTimer  = null;
 let emgActive = false;
+let saluteActive = false;
 let emgPattern= 'red-blue';
 let overrideTimer = null;
 let selectedPeColors = [];
@@ -2832,6 +2908,31 @@ async function callService(domain, service, data) { return haFetch(`/api/service
 async function lightOn(entity, data)  { return callService('light','turn_on',  { entity_id: entity, ...data }); }
 async function lightOff(entity, data) { return callService('light','turn_off', { entity_id: entity, ...data }); }
 
+// External manual override — closes a real gap: ChromaCal's own _schedOverride
+// only protects against ChromaCal's OWN periodic re-fire, it has zero
+// visibility into anything outside the browser tab, like a physical Zigbee
+// button. If that button fires an emergency action while ChromaCal's tab
+// happens to be open, the next 30-second publish cycle would otherwise
+// silently overwrite it with whatever the schedule says, since nothing tells
+// ChromaCal the button was pressed at all.
+//
+// Fully opt-in: checks input_boolean.chromacal_manual_override, a helper
+// entity that doesn't exist unless you create it. If it's missing, this
+// fails gracefully and ChromaCal behaves exactly as it always has — nothing
+// breaks for anyone who hasn't set this up. To actually use it, create that
+// input_boolean in HA, then have your button's own automation turn it on
+// when it fires something ChromaCal shouldn't fight, and turn it back off
+// after a reasonable window (30 min, matching ChromaCal's own OVERRIDE_MINS,
+// is a sensible default).
+async function isExternalOverrideActive() {
+  try {
+    const state = await getState('input_boolean.chromacal_manual_override');
+    return state.state === 'on';
+  } catch (e) {
+    return false; // entity doesn't exist or HA unreachable — fail open, not closed
+  }
+}
+
 // ── HOLIDAY LOGIC ─────────────────────────────────────────────
 
 // ── DATE ALGORITHMS ──────────────────────────────────────────────────────────
@@ -2848,6 +2949,35 @@ function getEasterDate(y) {
     h=(19*a+b-d-g+15)%30, i=Math.floor(c/4), k=c%4,
     l=(32+2*e+2*i-h-k)%7, m_=Math.floor((a+11*h+22*l)/451);
   return { m: Math.floor((h+l-7*m_+114)/31), d: ((h+l-7*m_+114)%31)+1 };
+}
+
+// Solstice/equinox day-of-month table, UTC, cross-checked against Wikipedia's
+// Equinox/September equinox tables and the US Naval Observatory (aa.usno.navy.mil).
+// Format: [marchEquinox, juneSolstice, septEquinox, decSolstice]
+// Verified 2024-2031. Earth's orbit means these can land a day either side of
+// midnight depending on timezone — close enough for a seasonal lighting cue.
+const SOLSTICE_EQUINOX_TABLE = {
+  2024: [20,20,22,21], 2025: [20,21,22,21], 2026: [20,21,23,21], 2027: [20,21,23,22],
+  2028: [20,20,22,21], 2029: [20,21,22,21], 2030: [20,21,22,21], 2031: [20,21,23,22],
+};
+// Falls back to the most common date of the 16 years (2016-2031) actually checked,
+// for any year outside the verified table above.
+const SOLSTICE_EQUINOX_FALLBACK = [20,21,22,21];
+function getSolsticeEquinoxDays(year) {
+  return SOLSTICE_EQUINOX_TABLE[year] || SOLSTICE_EQUINOX_FALLBACK;
+}
+
+// Builds the 4 solstice/equinox pagan events for a given year with resolved dates.
+// type:'pagan_solstice' (not 'holiday') so the sacred-night check below can find
+// these specifically and gate them on CFG.paganExtendedNights.
+function getPaganSolsticeEvents(year) {
+  const [marD, junD, sepD, decD] = getSolsticeEquinoxDays(year);
+  return [
+    {m:3,  d1:marD, d2:marD, name:'Ostara (Spring Equinox)',  cat:'pagan', icon:'🌱', colors:['#FFF4B0','#A8D8A8','#FFD1DC'], type:'pagan_solstice', note:'Balance of day and night, renewal'},
+    {m:6,  d1:junD, d2:junD, name:'Litha (Summer Solstice)',  cat:'pagan', icon:'☀️', colors:['#FFD700','#FFA500'],           type:'pagan_solstice', note:'Longest day, the sun at its peak'},
+    {m:9,  d1:sepD, d2:sepD, name:'Mabon (Fall Equinox)',     cat:'pagan', icon:'🍁', colors:['#CC6B2C','#8B5A2B','#A0522D'], type:'pagan_solstice', note:'Second harvest, balance, gratitude'},
+    {m:12, d1:decD, d2:decD, name:'Yule (Winter Solstice)',   cat:'pagan', icon:'🌲', colors:['#0B6E4F','#A4243B','#D4AF37'], type:'pagan_solstice', note:'Longest night, the return of the light'},
+  ];
 }
 
 // Returns the date of the nth occurrence of a weekday in a given month/year.
@@ -2945,7 +3075,40 @@ function getEnabledHolidays() {
   const overrides = _floatCache[key] || {};
   const base = REGION_CALENDARS[CFG.region] || US_HOLIDAYS;
   const resolved = base.map(h => overrides[h.name] ? {...h, ...overrides[h.name]} : h);
-  return [...resolved, ...GLOBAL_FLOATING].filter(h => CFG.categories[h.cat]);
+  const merged = [...resolved, ...GLOBAL_FLOATING, ...getPaganSolsticeEvents(year)].filter(h => CFG.categories[h.cat]);
+  // Apply user color overrides last, so they win regardless of which list an event came from
+  const colorOverrides = CFG.colorOverrides || {};
+  return merged.map(h => colorOverrides[h.name] ? {...h, colors: colorOverrides[h.name]} : h);
+}
+// ── GENERALIZED SAME-TIER COLLISION RESOLUTION ───────────────────────────────
+// Two real events can land on the exact same calendar day within the same
+// priority tier — Father's Day and Litha both resolve to June 21, 2026, and
+// Samhain and Halloween collide on October 31st every single year, permanently.
+// Previously this was resolved silently by array order, the loser didn't just
+// lose, it vanished from the Upcoming list entirely with no indication anything
+// else existed. This resolves it deliberately instead, in priority order:
+//   1. A saved preference for this exact pair, set once, remembered forever —
+//      the right answer for a permanent collision like Samhain/Halloween.
+//   2. Tonight's Pick — the existing mechanism, now reachable for sacred/vigil/
+//      holiday tiers too, not just the awareness-month split it was scoped to
+//      before. The right answer for a one-off coincidence like 2026's Litha.
+//   3. Falls back to array order, same as the original behavior, just now an
+//      explicit, understood default instead of an accident nobody could see.
+function resolveTierWinner(candidates, lightName) {
+  if (candidates.length <= 1) return candidates[0] || null;
+  const names = candidates.map(c => c.name).slice().sort();
+  const pairKey = names.join(' vs ');
+  const savedPref = CFG.collisionPreferences?.[pairKey];
+  if (savedPref) {
+    const preferred = candidates.find(c => c.name === savedPref);
+    if (preferred) return preferred;
+  }
+  const pick = CFG.tonightPick?.[lightName];
+  if (pick) {
+    const picked = candidates.find(c => c.name === pick);
+    if (picked) return picked;
+  }
+  return candidates[0];
 }
 // ── SPLIT-NIGHT SCHEDULE ENGINE ──────────────────────────────────────────────
 // Returns array of { event, startH, endH } segments for tonight.
@@ -2979,18 +3142,23 @@ function getNightSegments(now, light) {
     : null;
   const colorEndH = (wwH && wwH < cfgEnd) ? wwH : cfgEnd;
 
+  // ── GENERALIZED SAME-TIER COLLISION RESOLUTION ───────────────────────────
+  // See resolveTierWinner() above for the full reasoning. Filter (not find)
+  // so a real collision is detected, not just silently won.
   const tonightPick = CFG.tonightPick?.[lightName] || null;
 
-  // Sacred (watchfire/vigil-all-night) — full window, no split
-  const sacred = holidays.find(h => h.type==='sacred' && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const sacredCandidates = holidays.filter(h => (h.type==='sacred' || (h.type==='pagan_solstice' && CFG.paganExtendedNights)) && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const sacred = resolveTierWinner(sacredCandidates, lightName);
   if (sacred) return [{ event:{...sacred}, startH: colorStartH, endH: 25, isSacred:true }];
 
   // Vigil (sunset-to-configure) — single winner
-  const vigil = holidays.find(h => h.type==='vigil' && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const vigilCandidates = holidays.filter(h => h.type==='vigil' && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const vigil = resolveTierWinner(vigilCandidates, lightName);
   if (vigil) return [{ event:{...vigil}, startH: colorStartH, endH: colorEndH }];
 
   // Holiday — single winner, awareness doesn't run alongside (Q1 answer: default holiday-only)
-  const holiday = holidays.find(h => h.type==='holiday' && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const holidayCandidates = holidays.filter(h => (h.type==='holiday' || h.type==='pagan_solstice') && h.m===m && d>=h.d1 && d<=h.d2 && notSkipped(h));
+  const holiday = resolveTierWinner(holidayCandidates, lightName);
   if (holiday) return [{ event:{...holiday}, startH: colorStartH, endH: colorEndH }];
 
   // Awareness — find ALL active, split equally
@@ -3039,7 +3207,7 @@ function getTonightSchedule(now, light) {
   const wwH = (light?.warmwhiteEnabled !== false && light?.warmwhiteTime)
     ? (parseInt(light.warmwhiteTime.split(':')[0]) + parseInt(light.warmwhiteTime.split(':')[1])/60)
     : null;
-  const skipWW = (cur.event.type==='sacred') || (!wwH);
+  const skipWW = cur.isSacred || (!wwH);
   return { ...cur.event, endHour: cur.isSacred ? 25 : cfgEnd, skipWarmWhite: skipWW };
 }
 function getUpcomingEvents(now, days=45) {
@@ -3055,19 +3223,17 @@ function getUpcomingEvents(now, days=45) {
   for (let i = 0; i <= days; i++) {
     const d = new Date(now); d.setDate(d.getDate()+i);
     const m = d.getMonth()+1, day = d.getDate();
-    let addedForDay = false;
     for (const h of allEvents) {
       if (h.m === m && day >= h.d1 && day <= h.d2) {
         const isMultiDay = h.d1 !== h.d2;
         if (isMultiDay && day > h.d1 && i > 0) continue;
         events.push({ date: new Date(d), ...h, isToday: i===0 });
-        addedForDay = true;
-        // For future days: only show the first matching event per day.
-        // For TODAY: show ALL active events (user needs to see and manage each one).
-        if (i > 0) break;
+        // Used to stop at the first match per future day, which hid genuine
+        // same-day collisions like Litha landing on Father's Day in 2026.
+        // The multi-day skip above already prevents a month-long event from
+        // repeating every day, so nothing further needs limiting here.
       }
     }
-    // If nothing found for a future day, keep scanning
   }
   const seen = new Set();
   return events.filter(e => {
@@ -3198,6 +3364,8 @@ async function update() {
   // Fetch actual sunset time once per day from HA's sun.sun entity
   fetchSunset();
 
+  const externalOverride = await isExternalOverrideActive();
+
   try {
     const state = await getState(light.entity);
     const isOn  = state.state === 'on';
@@ -3234,6 +3402,31 @@ async function update() {
     const segsNow   = getNightSegments(now, light);
     const nowHours  = now.getHours() + now.getMinutes()/60;
     const curSegNow = getCurrentSegment(segsNow, nowHours);
+
+    // 21 Gun Salute auto-fire — fires once near the start of the color window
+    // on Memorial Day, POW/MIA Recognition Day, or any Personal Event marked
+    // Memorial type. Researched against real military tradition before settling
+    // on this list specifically (the three-volley tradition this feature actually
+    // models is for honoring the fallen, not service anniversaries or Veterans
+    // Day, which honors the living too) — see ROADMAP.md. Date-keyed so it only
+    // fires once per occurrence, not every update cycle, and only within the
+    // first 10 minutes of the window opening so reopening the tab hours later
+    // doesn't trigger it late into the night.
+    const SALUTE_AUTO_NAMES = ['Memorial Day', 'POW\u00b7MIA Recognition Day'];
+    const isSaluteOccasion = SALUTE_AUTO_NAMES.includes(curSegNow.event.name) || curSegNow.event.type === 'memorial';
+    if (isSaluteOccasion && !emgActive && !saluteActive) {
+      const todayKey = now.toISOString().slice(0,10);
+      const lastFired = CFG.saluteFiredDates?.[light.name] || '';
+      const minutesIntoWindow = (nowHours - curSegNow.startH) * 60;
+      if (lastFired !== todayKey && minutesIntoWindow >= 0 && minutesIntoWindow <= 10) {
+        if (!CFG.saluteFiredDates) CFG.saluteFiredDates = {};
+        CFG.saluteFiredDates[light.name] = todayKey;
+        saveConfig();
+        addLog(`🎖️ ${curSegNow.event.name} — auto-firing the Salute`, 'info');
+        fire21GunSalute();
+      }
+    }
+
     const schedule  = { ...curSegNow.event, endHour: curSegNow.isSacred ? 25 : (
       (light.endType==='time' && light.endTime) ? parseInt(light.endTime.split(':')[0]) || 23 : 23
     ), skipWarmWhite: curSegNow.isSacred };
@@ -3263,7 +3456,13 @@ async function update() {
         addLog('🔒 Auto-fire initialized — observing schedule (no fire on first load)', 'info');
       }
       const override    = _schedOverride[lightKey];
-      const isOverridden = override && new Date() < override.until;
+      const isOverridden = (override && new Date() < override.until) || externalOverride;
+      if (externalOverride && !_loggedExternalOverride) {
+        _loggedExternalOverride = true;
+        addLog('🖐 External override detected (input_boolean.chromacal_manual_override) — standing down', 'info');
+      } else if (!externalOverride) {
+        _loggedExternalOverride = false;
+      }
       if (!isOverridden) {
         const desiredKey = getDesiredFireKey(now, light, segsNow);
         // Fade-in: if configured, fire warm-up color at sunset start
@@ -3860,7 +4059,7 @@ function renderUpcoming(now) {
 
   const rows = events.map(ev => {
     const dateStr   = ev.isToday ? 'TODAY' : ev.date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const chips     = (ev.colors||[]).slice(0,5).map(c => '<div class="ev-chip" style="background:' + c + '"></div>').join('');
+    const chips     = (ev.colors||[]).map(c => '<div class="ev-chip" style="background:' + c + '"></div>').join('');
 
     // ── SKIP STATE — keep permanent and tonight-only SEPARATE ─────────────────
     // isPermSkip  : event is permanently off until manually re-enabled (⊘ button)
@@ -3891,10 +4090,15 @@ function renderUpcoming(now) {
 
     let pickBtn = '';
 
+    // 🎨 Customize colors — every event, any day, not just today
+    const hasOverride = !!(CFG.colorOverrides && CFG.colorOverrides[ev.name]);
+    const colorsJson = JSON.stringify(ev.colors || []).replace(/"/g, '&quot;');
+    pickBtn += '<button class="ev-color-btn' + (hasOverride?' customized':'') + '" data-evname="' + safeName + '" data-colors="' + colorsJson + '" onclick="openEventColorModal(this)" title="' + (hasOverride ? 'Customized — click to edit' : 'Customize colors for this event') + '">🎨</button>';
+
     // ★ Tonight's Pick — today only, not when either skip type is active
     if (ev.isToday && !isSkipped && light) {
       const isPicked = tonightPick === ev.name;
-      pickBtn = '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" data-pickname="' + safeName + '" onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
+      pickBtn += '<button class="ev-pick-btn' + (isPicked?' picked':'') + '" data-pickname="' + safeName + '" onclick="pickBtnClick(this)" title="' + (isPicked ? 'Clear — resume split' : 'Pick this event tonight') + '">'
         + (isPicked ? '\u2605' : '\u2606') + '</button>';
     }
 
@@ -3917,7 +4121,7 @@ function renderUpcoming(now) {
     return '<div class="' + rowCls + '">'
       + '<div class="ev-date">' + dateStr + '</div>'
       + '<div class="ev-icon">' + (ev.icon || '\u{1F4C5}') + '</div>'
-      + '<div class="ev-name">' + ev.name + (statusBadge ? ' ' + statusBadge : '') + '</div>'
+      + '<div class="ev-name"><span class="ev-name-text">' + ev.name + '</span>' + (statusBadge ? statusBadge : '') + '</div>'
       + '<div class="ev-chips">' + chips + '</div>'
       + (() => {
         const typeLabels = {
@@ -4106,29 +4310,42 @@ async function testTonight() {
 
   const light = CFG.lights[activeLightIdx];
   if (!light) return;
-  const schedule = getTonightSchedule(new Date(), light);
-  if (!schedule.colors?.length) return;
+  const segs = getNightSegments(new Date(), light);
+  if (!segs.length) return;
 
   const style  = LIGHTING_STYLES[light.intensityOverride || CFG.lightingStyle || 'balanced'] || LIGHTING_STYLES.balanced;
   const briPct = Math.round(100 * (style.briMul ?? 1));
-  const colors = schedule.colors;
+
+  // Flatten every segment's full color set into one ordered sequence, so the
+  // test walks through the WHOLE night, not just whichever segment happens to
+  // be active right now. Each step remembers which event it came from, so a
+  // split night (e.g. 3 awareness months) tests all three in turn instead of
+  // looping the first one forever.
+  const steps = [];
+  segs.forEach(seg => {
+    (seg.event.colors || []).forEach(col => {
+      steps.push({ name: seg.event.name, color: col });
+    });
+  });
+  if (!steps.length) return;
 
   _testActive = true;
-  addLog(`▶ Test loop started: ${schedule.name} — ${colors.length} color${colors.length>1?'s':''} × 30s each`, 'ok');
+  const segSummary = segs.map(s => s.event.name).join(' \u2192 ');
+  addLog(`▶ Test loop started: ${segSummary} — ${steps.length} color${steps.length>1?'s':''} total × 30s each`, 'ok');
   setManualOverride(light.name || light.entity, 'Test Color');
   const btn = document.getElementById('btn-test-tonight');
   if (btn) btn.innerHTML = '<span class="qc-icon">⏹️</span>Stop Test';
 
-  // Loop through all colors continuously at 30s each until stopped.
+  // Loop through every step continuously at 30s each until stopped.
   // transition: 0 = instant cut (crisp, visible). 30s hold = see full effect.
   let idx = 0;
   const fireNext = async () => {
     if (!_testActive) return;
-    const col    = colors[idx % colors.length];
-    const styled = applyIntensity(hexToRgb(col), light.intensityOverride);
+    const step   = steps[idx % steps.length];
+    const styled = applyIntensity(hexToRgb(step.color), light.intensityOverride);
     try {
       await lightOn(light.entity, { rgb_color: styled, brightness_pct: briPct, transition: 0 });
-      addLog(`  Color ${(idx % colors.length)+1}/${colors.length}: ${col}`, 'info');
+      addLog(`  ${step.name} — color ${(idx % steps.length)+1}/${steps.length}: ${step.color}`, 'info');
     } catch(e) {
       addLog(`  Color error (continuing): ${e.message}`, 'warn');
     }
@@ -4174,54 +4391,94 @@ async function forceLightsOff() {
 }
 
 // ── 21 GUN SALUTE ─────────────────────────────────────────────────────────────
-// 3 volleys × 7 white flashes each = 21 total. 1s on, 1s off within a volley.
-// 3s pause between volleys. After all 21, resume the schedule.
-// Volley pattern: flash-flash-flash-flash-flash-flash-flash ... pause ... repeat × 3
-async function fire21GunSalute() {
-  const light = CFG.lights[activeLightIdx];
-  if (!light) { addLog('No light configured', 'warn'); return; }
+// Redesigned after real testing showed the original 21-individual-flash version
+// looked like a glitching strobe on a single light source, not a tribute. The
+// actual military structure is 7 riflemen firing together, 3 separate times —
+// to an observer, that's 3 distinguishable moments, not 21. Researched against
+// real stadium/public tribute practice too: nobody, anywhere, simulates a
+// literal volley pattern with lights or fireworks, this is genuinely uncharted
+// ground, so the redesign follows the actual perceptual logic of a volley
+// rather than copying a precedent that doesn't exist.
+//
+// Structure: 3 shots (one per volley) — white flash, red afterglow, pause —
+// then a closing Taps phase, a sustained somber light, then a fade before
+// resuming the schedule. That sequence (volleys, silence, Taps) is the real,
+// confirmed order military funerals actually use.
+//
+// flash: short/long (HA's native light effect) was considered and rejected —
+// real-world reports show it behaves inconsistently across integrations,
+// including documented ZHA-specific quirks and cases of lights getting stuck
+// on instead of restoring. Manual on/off sequencing is more verbose but fully
+// deterministic, which matters more here than brevity.
+const SALUTE_PACES = {
+  fast:     { flashOn: 1200, afterglow: 1800, pause: 1200, tapsHold: 25000, fadeOut: 4000 },
+  standard: { flashOn: 1800, afterglow: 2500, pause: 1800, tapsHold: 35000, fadeOut: 6000 },
+  slow:     { flashOn: 2200, afterglow: 3200, pause: 2500, tapsHold: 45000, fadeOut: 8000 },
+};
+function getSalutePace() {
+  return SALUTE_PACES[CFG.salutePace] || SALUTE_PACES.standard;
+}
 
-  // ── TIMING — tune these if your mesh needs more or less room ──────────────
-  // FLASH_TRANSITION: a true 0 demands an instantaneous snap with zero grace
-  // period. Real Zigbee commands, especially to a GROUP entity fanning out to
-  // multiple physical bulbs, have genuine radio propagation latency. A short
-  // transition tends to land far more reliably on real hardware than a hard
-  // instant snap, which can get coalesced or dropped if the next command
-  // arrives before the bulb's radio has even processed the "instant" one.
-  const FLASH_TRANSITION = 0.1;   // seconds
-  const FLASH_ON_MS      = 1000;  // how long the flash stays visibly on
-  const FLASH_OFF_MS     = 700;   // dark gap before the next round
-  const VOLLEY_PAUSE_MS  = 3000;  // dim red glow between volleys
+async function fire21GunSalute() {
+  // Broadcasts across every light marked to participate (inSalute !== false),
+  // not just whichever tab happens to be active — a tribute moment is naturally
+  // a whole-house thing, the same reasoning as Emergency Mode above.
+  const lights = CFG.lights.filter(l => l.inSalute !== false);
+  if (!lights.length) { addLog('No lights configured to participate in the Salute', 'warn'); return; }
+  saluteActive = true;
+
+  // Root cause of 500 errors: 0.1s transition demanded an instant snap
+  // Zigbee can't reliably deliver, especially going from off/dim to full white.
+  // The afterglow always succeeded (0.5s, gentler change). Fix: 1.0s for all
+  // commands + a 600ms settling delay after each one, separating "time for
+  // the bulb to process" from "how long the visual effect is held."
+  const CMD_TRANSITION = 1.0;
+  const SETTLE_MS = 600;
+  const settle = () => new Promise(r => setTimeout(r, SETTLE_MS));
+  const pace = getSalutePace();
 
   const btn = document.getElementById('btn-salute');
   if (btn) { btn.textContent = '🎖️ Salute in progress...'; btn.disabled = true; }
-  addLog('🎖️ 21 Gun Salute: commencing — 3 volleys × 7', 'info');
+  addLog(`🎖️ 21 Gun Salute: commencing — 3 volleys, ${lights.length} light${lights.length>1?'s':''}`, 'info');
 
-  const flash = async () => {
-    // True bright white, not warm 2700K — reads as a flash, not a porch light.
-    try { await lightOn(light.entity, { rgb_color: [255, 255, 255], brightness_pct: 100, transition: FLASH_TRANSITION }); } catch(e) { addLog('Salute flash error: ' + e.message, 'err'); }
-    await new Promise(r => setTimeout(r, FLASH_ON_MS));
-    try { await lightOff(light.entity, { transition: FLASH_TRANSITION }); } catch(e) { addLog('Salute flash-off error: ' + e.message, 'err'); }
-    await new Promise(r => setTimeout(r, FLASH_OFF_MS));
+  const setAll = async (label, rgb, briPct) => {
+    await Promise.all(lights.map(async (light) => {
+      try { await lightOn(light.entity, { rgb_color: rgb, brightness_pct: briPct, transition: CMD_TRANSITION }); } catch(e) { addLog(`Salute ${label} error (${light.name}): ` + e.message, 'err'); }
+    }));
+    await settle();
   };
 
   try {
     for (let volley = 1; volley <= 3; volley++) {
-      addLog(`  Volley ${volley}/3 — 7 rounds`, 'info');
-      for (let shot = 1; shot <= 7; shot++) {
-        await flash();
-      }
+      addLog(`  Volley ${volley}/3`, 'info');
+      await setAll('flash', [255, 255, 255], 100);
+      await new Promise(r => setTimeout(r, pace.flashOn));
+      await setAll('afterglow', [60, 0, 0], 20);
+      await new Promise(r => setTimeout(r, pace.afterglow));
       if (volley < 3) {
-        // Pause between volleys — dim red glow to simulate smoke/heat
-        try { await lightOn(light.entity, { rgb_color: [30, 0, 0], brightness_pct: 15, transition: 1 }); } catch(e) { addLog('Salute volley-pause error: ' + e.message, 'err'); }
-        await new Promise(r => setTimeout(r, VOLLEY_PAUSE_MS));
+        await Promise.all(lights.map(async (light) => {
+          try { await lightOff(light.entity, { transition: CMD_TRANSITION }); } catch(e) { addLog(`Salute pause error (${light.name}): ` + e.message, 'err'); }
+        }));
+        await settle();
+        await new Promise(r => setTimeout(r, pace.pause));
       }
     }
+
+    addLog('  Taps', 'info');
+    await setAll('taps', [255, 147, 41], 35);
+    await new Promise(r => setTimeout(r, pace.tapsHold));
+    await Promise.all(lights.map(async (light) => {
+      try { await lightOff(light.entity, { transition: pace.fadeOut / 1000 }); } catch(e) { addLog(`Salute fade error (${light.name}): ` + e.message, 'err'); }
+    }));
+    await settle();
+    await new Promise(r => setTimeout(r, pace.fadeOut));
+
     addLog('🎖️ 21 Gun Salute complete — resuming schedule', 'ok');
   } catch(e) {
     addLog(`Salute interrupted: ${e.message}`, 'warn');
   } finally {
-    if (btn) { btn.textContent = '🎖️ 21 Gun Salute · 3 volleys × 7 · white flash'; btn.disabled = false; }
+    saluteActive = false;
+    if (btn) { btn.textContent = '🎖️ 21 Gun Salute · 3 volleys + Taps'; btn.disabled = false; }
     // Resume normal schedule
     update();
   }
@@ -4268,27 +4525,24 @@ async function setSolidarity() {
 }
 
 // ── EMERGENCY ─────────────────────────────────────────────────
-// Emergency patterns defined as color arrays.
-// Zigbee can handle ~1 command per 1-2 seconds reliably.
-// 500ms was too fast — commands queued up causing long red then long blue delays.
-// 1500ms per phase gives visible alternation without overwhelming the Zigbee mesh.
-//
 // Pattern behavior:
-//   US Red/Blue  — alternates red ↔ blue (police/fire simulation) every 1.5s
-//   EU Blue      — solid blue + slow 2.5s pulse (off briefly then back) for attention
+//   US Red/Blue  — alternates red ↔ blue (police/fire simulation)
+//   EU Blue      — alternates blue ↔ white (real ambulance/fire-engine convention)
 //   Amber        — solid amber (roadway/construction emergency standard)
-//   Red/White    — alternates red ↔ white (fire truck simulation) every 1.5s
-//
+//   Red/White    — alternates red ↔ white (fire truck simulation)
 // "Emergency" vs "solid color": emergency flickers/alternates. Solidarity is solid.
-const EMG_PATTERNS = {
-  'red-blue':  [['#f43f5e'],[],[],['#3b82f6']],
-  'blue':      [['#3b82f6']],
-  'amber':     [['#f59e0b']],
-  'red-white': [['#f43f5e'],[],['#FFFFFF']]
-};
+// The actual sequence per pattern lives inline in startEmergency() below.
+// Timing is real-hardware-tunable now (getEmergencyInterval(), CFG.emergencyInterval),
+// not a hardcoded guess — see that function for the history of why.
 
-// Interval between each phase step (ms) — 1500ms is the sweet spot for Zigbee
-const EMG_INTERVAL = 3000;  // 3s per phase — Zigbee needs time to process
+// Interval between each phase step (ms). Was a hardcoded 3000, which real-world
+// testing on Zigbee hardware still showed occasional 500 errors during a run,
+// commands arriving faster than the mesh could reliably process them. Now a
+// real, tunable setting instead of another guessed constant — CFG.emergencyInterval,
+// defaulting to 5000ms, configurable in Settings.
+function getEmergencyInterval() {
+  return CFG.emergencyInterval || 5000;
+}
 
 function selectEmgPattern(btn) {
   document.querySelectorAll('.emg-opt').forEach(b=>b.classList.remove('selected'));
@@ -4303,49 +4557,49 @@ function toggleEmergency() {
 }
 
 function startEmergency() {
-  const light = CFG.lights[activeLightIdx];
-  if (!light) { addLog('No light configured for emergency', 'warn'); return; }
+  // Broadcasts across every light marked to participate (inEmergencyBroadcast
+  // !== false), not just whichever tab happens to be active. A back yard light
+  // genuinely shouldn't join an emergency broadcast meant to help responders
+  // spot the front of the house — that's what the per-light toggle is for.
+  const lights = CFG.lights.filter(l => l.inEmergencyBroadcast !== false);
+  if (!lights.length) { addLog('No lights configured to participate in Emergency Mode', 'warn'); return; }
   emgActive = true;
-  setManualOverride(light.name || light.entity, 'Emergency Mode');
+  lights.forEach(l => setManualOverride(l.name || l.entity, 'Emergency Mode'));
   const btn = document.getElementById('emg-btn');
   btn.classList.add('active');
   btn.innerHTML = '🚨 EMERGENCY ACTIVE — Tap to Cancel';
   document.getElementById('emergency-banner').classList.add('active');
-  document.getElementById('emg-banner-text').textContent = `🚨 EMERGENCY MODE ACTIVE — ${light.name.toUpperCase()}`;
+  document.getElementById('emg-banner-text').textContent = `🚨 EMERGENCY MODE ACTIVE — ${lights.length} light${lights.length>1?'s':''}`;
   document.getElementById('color-orb').classList.add('emergency');
-  addLog(`🚨 EMERGENCY MODE ACTIVATED — ${light.name} (${emgPattern || 'red-blue'})`, 'err');
+  addLog(`🚨 EMERGENCY MODE ACTIVATED — ${lights.length} light${lights.length>1?'s':''} (${emgPattern || 'red-blue'})`, 'err');
 
-  // Build the color sequence for this pattern
-  // Multi-step patterns cycle through colors at EMG_INTERVAL each
-  // Single-color patterns pulse (on → brief off → on) for attention
   let sequence;
   const P = emgPattern || 'red-blue';
-  if (P === 'red-blue')  sequence = ['#FF0000', '#0000FF'];          // US: red/blue police
-  else if (P === 'blue') sequence = ['#0000FF', null];               // EU: blue pulse (null = off briefly)
-  else if (P === 'amber') sequence = ['#FF8C00', null];              // Amber: pulse
-  else if (P === 'red-white') sequence = ['#FF0000', '#FFFFFF'];     // Fire: red/white
+  if (P === 'red-blue')  sequence = ['#FF0000', '#0000FF'];
+  else if (P === 'blue') sequence = ['#0000FF', '#FFFFFF'];     // EU: blue/white, the real ambulance/fire-engine convention, not just a solid pulse
+  else if (P === 'amber') sequence = ['#FF8C00', null];
+  else if (P === 'red-white') sequence = ['#FF0000', '#FFFFFF'];
   else sequence = ['#FF0000'];
 
-  // EMG_TRANSITION matches the Salute's established pattern — a true 0 demands
-  // an instantaneous snap with zero grace period, which can get coalesced or
-  // dropped on real Zigbee hardware. EMG_INTERVAL already gives 3s of breathing
-  // room between fires, so this is mainly about not sending the risky value itself.
   const EMG_TRANSITION = 0.1;
   let idx = 0;
   const fire = async () => {
     const col = sequence[idx % sequence.length];
-    try {
-      if (col === null) {
-        // Brief off step — creates pulse effect for single-color patterns
-        await lightOff(light.entity, { transition: EMG_TRANSITION });
-      } else {
-        await lightOn(light.entity, { rgb_color: hexToRgb(col), brightness_pct: 100, transition: EMG_TRANSITION });
-      }
-    } catch(e) { addLog('Emergency fire error: ' + e.message, 'err'); }
+    // All participating lights fire the same step concurrently, not one after
+    // another — a broadcast should look like a broadcast, not a chase.
+    await Promise.all(lights.map(async (light) => {
+      try {
+        if (col === null) {
+          await lightOff(light.entity, { transition: EMG_TRANSITION });
+        } else {
+          await lightOn(light.entity, { rgb_color: hexToRgb(col), brightness_pct: 100, transition: EMG_TRANSITION });
+        }
+      } catch(e) { addLog(`Emergency fire error (${light.name}): ` + e.message, 'err'); }
+    }));
     idx++;
   };
   fire(); // Fire immediately on activation
-  emgTimer = setInterval(fire, EMG_INTERVAL);
+  emgTimer = setInterval(fire, getEmergencyInterval());
 }
 
 function stopEmergency() {
@@ -4474,6 +4728,13 @@ function renderSettingsTab() {
       <div class="sett-h">📅 What to Celebrate</div>
       <div class="sett-sub">Toggle categories on or off. Changes take effect tonight.</div>
       <div class="cat-grid">${catsHTML}</div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+          <input type="checkbox" id="s-pagan-extended" ${CFG.paganExtendedNights?'checked':''} style="width:auto;margin-top:2px" onchange="togglePaganExtended(this)">
+          <span><strong>Extend Solstices &amp; Equinoxes overnight</strong><br>
+          <span style="color:var(--muted);font-size:12px">Off = standard single evening, same as any other holiday. On = sacred-night treatment like POW/MIA and Memorial Day, running until ~1am. Doesn't affect Imbolc, Beltane, Lughnasadh, or Samhain — those are always standard.</span></span>
+        </label>
+      </div>
     </div>
 
     <div class="card">
@@ -4531,7 +4792,7 @@ function renderSettingsTab() {
       <div class="sett-h">⚠️ Reset</div>
       <div class="sett-sub">Clears all settings — lights, categories, connection, and theme. Cannot be undone.</div>
       <button class="btn btn-danger btn-sm" style="width:100%" onclick="resetAll()">Reset All ChromaCal Settings</button>
-      <div style="margin-top:8px;font-size:11px;color:var(--muted)">ChromaCal v1.0.0 · <a href="https://github.com/TheRealApollyon/chromacal" target="_blank" style="color:var(--cyan)">github.com/TheRealApollyon/chromacal</a></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">ChromaCal v${VERSION} · <a href="https://github.com/TheRealApollyon/chromacal" target="_blank" style="color:var(--cyan)">github.com/TheRealApollyon/chromacal</a></div>
     </div>
 
     <div class="card s-col3">
@@ -4575,6 +4836,7 @@ function renderSettingsTab() {
       .filter(h => CFG.categories[h.cat])
       .slice().sort((a,b) => (a.m*100+a.d1) - (b.m*100+b.d1));
     const globalEnabled = GLOBAL_FLOATING.filter(h => CFG.categories[h.cat]);
+    const paganSolsticeEnabled = CFG.categories.pagan ? getPaganSolsticeEvents(new Date().getFullYear()) : [];
 
     function makeSkipRow(h) {
       const isSkip = skipped.includes(h.name);
@@ -4594,6 +4856,11 @@ function renderSettingsTab() {
       html += '<div style="padding:8px 4px 4px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-top:10px">'
         + '\uD83C\uDF19 Global Observances \u2014 Islamic, Jewish, Hindu, Lunar (all regions)</div>';
       html += globalEnabled.map(makeSkipRow).join('');
+    }
+    if (paganSolsticeEnabled.length) {
+      html += '<div style="padding:8px 4px 4px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-top:10px">'
+        + '\uD83C\uDF3F Pagan & Wiccan \u2014 Solstices &amp; Equinoxes (this year\u2019s dates)</div>';
+      html += paganSolsticeEnabled.map(makeSkipRow).join('');
     }
     skipList.innerHTML = html || '<div style="color:var(--muted);font-size:12px;padding:8px">Enable some categories first</div>';
   }
@@ -4674,6 +4941,12 @@ function toggleCat(key, el) {
   update();
 }
 
+function togglePaganExtended(el) {
+  CFG.paganExtendedNights = el.checked;
+  saveConfig();
+  update();
+}
+
 function renderSettingsPersonal() {
   const list = document.getElementById('s-personal-list');
   if (!list) return;
@@ -4711,6 +4984,8 @@ function openAddLight() {
   document.getElementById('ml-warmwhite').value    = '22:00';
   document.getElementById('ml-warmwhite-enabled').checked = true;
   document.getElementById('ml-intensity').value    = '';
+  document.getElementById('ml-in-emergency').checked = true;
+  document.getElementById('ml-in-salute').checked    = true;
   toggleModalTime('ml-start-time-wrap', false);
   toggleModalTime('ml-end-time-wrap', true);
   openModal('modal-light');
@@ -4745,6 +5020,8 @@ function openEditLight(idx) {
   if (entHint) entHint.textContent = 'Click ⟳ Detect to auto-populate from your HA instance';
   document.getElementById('ml-warmwhite').value    = l.warmwhiteTime || '22:00';
   document.getElementById('ml-warmwhite-enabled').checked = l.warmwhiteEnabled !== false;
+  document.getElementById('ml-in-emergency').checked = l.inEmergencyBroadcast !== false;
+  document.getElementById('ml-in-salute').checked    = l.inSalute !== false;
   const kwSel = document.getElementById('ml-warmwhite-kelvin');
   if (kwSel) {
     const savedK = l.warmwhiteKelvin || 250;
@@ -4787,7 +5064,9 @@ function saveLight() {
       return parseInt(sel?.value) || 250;
     })(),
     warmwhiteEnabled:  document.getElementById('ml-warmwhite-enabled').checked,
-    intensityOverride: document.getElementById('ml-intensity').value || null
+    intensityOverride: document.getElementById('ml-intensity').value || null,
+    inEmergencyBroadcast: document.getElementById('ml-in-emergency').checked,
+    inSalute:             document.getElementById('ml-in-salute').checked
   };
   const id = document.getElementById('ml-id').value;
   if (id !== '') CFG.lights[parseInt(id)] = lightObj;
@@ -4837,6 +5116,58 @@ function renderPeChips() {
 function removePeColor(idx) {
   selectedPeColors.splice(idx,1);
   renderPeChips();
+}
+
+// ── EVENT COLOR CUSTOMIZATION ────────────────────────────────────────────
+// Lets a user override the built-in color set for ANY event by name.
+// Storage: CFG.colorOverrides[eventName] = ['#hex', ...], applied once in
+// getEnabledHolidays() so every part of the app that reads event.colors
+// picks it up automatically — no other call site needs to know this exists.
+let selectedEvColors = [];
+let _editingEventName = '';
+
+function openEventColorModal(btn) {
+  _editingEventName = btn.dataset.evname;
+  const current = CFG.colorOverrides?.[_editingEventName] || JSON.parse(btn.dataset.colors.replace(/&quot;/g,'"'));
+  selectedEvColors = [...current];
+  document.getElementById('evc-event-name').textContent = _editingEventName;
+  renderEvChips();
+  openModal('modal-event-colors');
+}
+
+function addEvColor() {
+  const c = document.getElementById('evc-color-picker').value;
+  if (selectedEvColors.length < 6) {
+    selectedEvColors.push(c);
+    renderEvChips();
+  }
+}
+function renderEvChips() {
+  document.getElementById('evc-chips').innerHTML = selectedEvColors.map((c,i)=>
+    `<div class="chip" style="background:${c};cursor:pointer;width:22px;height:22px" onclick="removeEvColor(${i})" title="Click to remove"></div>`
+  ).join('');
+}
+function removeEvColor(idx) {
+  selectedEvColors.splice(idx,1);
+  renderEvChips();
+}
+function saveEventColorOverride() {
+  if (selectedEvColors.length === 0) { alert('Add at least one color.'); return; }
+  if (!CFG.colorOverrides) CFG.colorOverrides = {};
+  CFG.colorOverrides[_editingEventName] = selectedEvColors;
+  saveConfig();
+  closeModal('modal-event-colors');
+  addLog(`🎨 Colors customized: ${_editingEventName}`, 'ok');
+  if (settingsViewActive) renderSettingsTab();
+  update();
+}
+function resetEventColorOverride() {
+  if (CFG.colorOverrides) delete CFG.colorOverrides[_editingEventName];
+  saveConfig();
+  closeModal('modal-event-colors');
+  addLog(`🎨 Colors reset to default: ${_editingEventName}`, 'info');
+  if (settingsViewActive) renderSettingsTab();
+  update();
 }
 function savePersonalEvent() {
   const name      = document.getElementById('pe-name').value.trim();
@@ -5371,6 +5702,22 @@ function init() {
   // Set footer version from VERSION constant (static HTML can't evaluate JS variables)
   const fv = document.getElementById('footer-ver');
   if (fv) fv.textContent = 'v' + VERSION;
+
+  // Restore emergency pattern + interval — previously saved but never actually
+  // read back, so the UI silently reset to Red/Blue and the default speed on
+  // every page load regardless of what was last chosen.
+  if (CFG.emergencyPattern) {
+    emgPattern = CFG.emergencyPattern;
+    const patBtn = document.querySelector(`.emg-opt[data-pattern="${CFG.emergencyPattern}"]`);
+    if (patBtn) {
+      document.querySelectorAll('.emg-opt').forEach(b => b.classList.remove('selected'));
+      patBtn.classList.add('selected');
+    }
+  }
+  const emgIntervalSel = document.getElementById('emg-interval-select');
+  if (emgIntervalSel && CFG.emergencyInterval) emgIntervalSel.value = String(CFG.emergencyInterval);
+  const salutePaceSel = document.getElementById('salute-pace-select');
+  if (salutePaceSel && CFG.salutePace) salutePaceSel.value = CFG.salutePace;
 
   // Restore theme immediately (before any rendering)
   if (CFG.theme) {
