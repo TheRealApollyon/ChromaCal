@@ -27,12 +27,15 @@ If that changes how you weigh this project, that's a completely fair call to mak
 - **Split-night scheduling** — Multiple June awareness months (Pride, Men's Health, Caribbean Heritage) automatically split the color window equally
 - **Pub/Sub bridge** — Companion Blueprint keeps lights running server-side even when the browser is closed
 - **Tonight's Schedule** — Full visual timeline with countdown, phase list, feature toggles
-- **Quick Controls** — Test colors, Color Override, Force White (with Kelvin picker), Emergency Mode (US/EU/Amber/Red-White), 21 Gun Salute for military tribute events
+- **Quick Controls** — Test colors, Color Override, Force White (with Kelvin picker), Emergency Mode (US/EU/Amber/Red-White), 21 Gun Salute for military tribute events, Catch Up / Sync to re-push the correct state after a refresh or drift
 - **Skip system** — Permanent skip (⊘) or Skip Tonight only (🌙, auto-resets at midnight), both always reversible
 - **Tonight's Pick** — Force one event to own the full window (⭐)
 - **Warm White** — Security lighting at a configurable Kelvin (2700K → 6500K) before lights-off
 - **Fade-In control** — 30s to 10min crossfade when colors fire
 - **5 themes** — Daylight, Twilight (Catppuccin Mocha), Sci-Fi, Mono, Custom
+- **Pagan & Wiccan Observances (Beta)** — Wheel of the Year: Imbolc, Beltane, Lughnasadh, Samhain, plus solstices and equinoxes computed astronomically with optional extended sacred-night treatment
+- **Custom event colors** — 🎨 override any event's colors and they persist until you change them again
+- **Collision resolution** — when two events land on the same day, both show in the list so you can choose which runs via Tonight's Pick
 
 ---
 
@@ -132,20 +135,20 @@ ChromaCal publishes its schedule to `input_text.chromacal_[lightname]` in HA's s
 
 ## 🚨 Emergency Mode
 
-Alternating emergency lighting patterns using Zigbee-safe 3-second intervals:
+Alternating emergency lighting patterns with a configurable flash interval (tunable to match your Zigbee mesh's reliability):
 
 - 🔴🔵 **Red/Blue (US)** — Police/Fire simulation
-- 🔵 **Blue (EU)** — EU emergency standard with pulse
+- 🔵⚪ **Blue/White (EU)** — alternates blue and white, matching the real ambulance and fire-engine convention
 - 🟡 **Amber** — Roadway/construction
 - 🔴⚪ **Red/White** — Fire truck pattern
 
-Click again to cancel and resume the schedule.
+Firewall across every participating light at once (per-light opt-out available in Edit Light settings). Click again to cancel and resume the schedule.
 
 ---
 
 ## 🎖️ Military Tribute & Memorial Events
 
-Personal events support dedicated types beyond birthdays: Military Tribute auto-loads official US Flag Code colors for honoring a veteran, Memorial uses warm candlelight tones for remembrance. Quick Controls also includes a 21 Gun Salute, three volleys of seven white flashes with a dimmed red glow between volleys, for nights that call for it.
+Personal events support dedicated types beyond birthdays: Military Tribute auto-loads official US Flag Code colors for honoring a veteran, Memorial uses warm candlelight tones for remembrance. Quick Controls includes a three-volley salute, historically the correct structure for military funeral honors: each volley shown as a white flash with a red afterglow, followed by a sustained Taps close, then a slow fade before the schedule resumes. The salute auto-fires on Memorial Day, POW·MIA Recognition Day, and any personal event you mark as Memorial type. Fires across all participating lights simultaneously, with per-light opt-out available.
 
 ---
 
@@ -208,4 +211,4 @@ Issues and PRs welcome. Use **Settings → Feedback → Report a Bug** inside Ch
 
 MIT — do whatever you want, attribution appreciated.
 
-*ChromaCal v1.0.2 — Honor your heritage. Light your home.*
+*ChromaCal v1.1.0 — Honor your heritage. Light your home.*
