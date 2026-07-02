@@ -1146,9 +1146,10 @@ header {
   position: fixed; inset: 0; z-index: 300;
   background: rgba(7,10,18,.9);
   display: none;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 16px;
+  overflow-y: auto;
 }
 .modal-overlay.open { display: flex; }
 .modal {
@@ -1158,6 +1159,9 @@ header {
   width: 100%;
   max-width: 400px;
   padding: 20px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  margin: auto;
 }
 .modal-title {
   font-family: var(--fd);
