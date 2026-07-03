@@ -577,7 +577,20 @@ header {
 .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .badge-running .badge-dot { animation: pulse 1.5s infinite; }
 .color-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-.chip { width: 22px; height: 22px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,.15); flex-shrink: 0; }
+.chip { width: 24px; height: 24px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,.15); flex-shrink: 0; }
+.chip-item { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
+.chip-btns { display: flex; gap: 2px; }
+.chip-btn {
+  width: 18px; height: 16px; font-size: 11px; font-weight: 700;
+  border: 1px solid var(--border); background: var(--s2); color: var(--muted);
+  cursor: pointer; border-radius: 3px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; transition: background .15s, color .15s, border-color .15s;
+}
+.chip-btn:hover:not(:disabled) { background: var(--cyan); color: #000; border-color: var(--cyan); }
+.chip-btn:disabled { opacity: .2; cursor: default; }
+.chip-btn.chip-rm { background: rgba(180,30,30,.15); border-color: rgba(200,50,50,.3); }
+.chip-btn.chip-rm:hover { background: rgba(200,50,50,.7); color: #fff; border-color: rgba(200,50,50,.8); }
 .light-bar {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 14px;
@@ -5150,10 +5163,30 @@ function addPeColor() {
     renderPeChips();
   }
 }
+// ── COLOR CHIP REORDERING ──────────────────────────────────────────────────
+// Shared utility: swaps the element at idx with its neighbor in direction dir
+// (-1 = left, +1 = right). Returns a new array, never mutates the original.
+function _reorderColorArr(arr, idx, dir) {
+  const n = idx + dir;
+  if (n < 0 || n >= arr.length) return arr;
+  const a = [...arr];
+  [a[idx], a[n]] = [a[n], a[idx]];
+  return a;
+}
 function renderPeChips() {
   document.getElementById('pe-chips').innerHTML = selectedPeColors.map((c,i)=>
-    `<div class="chip" style="background:${c};cursor:pointer;width:22px;height:22px" onclick="removePeColor(${i})" title="Click to remove"></div>`
+    `<div class="chip-item">`
+    + `<div class="chip" style="background:${c}" title="${c}"></div>`
+    + `<div class="chip-btns">`
+    + `<button class="chip-btn" onclick="movePeColor(${i},-1)" title="Move left" ${i===0?"disabled":""}>‹</button>`
+    + `<button class="chip-btn chip-rm" onclick="removePeColor(${i})" title="Remove">×</button>`
+    + `<button class="chip-btn" onclick="movePeColor(${i},1)" title="Move right" ${i===selectedPeColors.length-1?"disabled":""}>›</button>`
+    + `</div></div>`
   ).join('');
+}
+function movePeColor(idx, dir) {
+  selectedPeColors = _reorderColorArr(selectedPeColors, idx, dir);
+  renderPeChips();
 }
 function removePeColor(idx) {
   selectedPeColors.splice(idx,1);
@@ -5186,8 +5219,18 @@ function addEvColor() {
 }
 function renderEvChips() {
   document.getElementById('evc-chips').innerHTML = selectedEvColors.map((c,i)=>
-    `<div class="chip" style="background:${c};cursor:pointer;width:22px;height:22px" onclick="removeEvColor(${i})" title="Click to remove"></div>`
+    `<div class="chip-item">`
+    + `<div class="chip" style="background:${c}" title="${c}"></div>`
+    + `<div class="chip-btns">`
+    + `<button class="chip-btn" onclick="moveEvColor(${i},-1)" title="Move left" ${i===0?"disabled":""}>‹</button>`
+    + `<button class="chip-btn chip-rm" onclick="removeEvColor(${i})" title="Remove">×</button>`
+    + `<button class="chip-btn" onclick="moveEvColor(${i},1)" title="Move right" ${i===selectedEvColors.length-1?"disabled":""}>›</button>`
+    + `</div></div>`
   ).join('');
+}
+function moveEvColor(idx, dir) {
+  selectedEvColors = _reorderColorArr(selectedEvColors, idx, dir);
+  renderEvChips();
 }
 function removeEvColor(idx) {
   selectedEvColors.splice(idx,1);
