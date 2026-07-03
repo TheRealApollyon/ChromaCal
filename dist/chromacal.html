@@ -3875,9 +3875,28 @@ function renderCalView(now) {
   const holidays = getEnabledHolidays();
   const skipped  = CFG.skippedEvents || [];
 
+  // Merge personal events into the calendar's data pipeline so they show
+  // in the grid and agenda, not just in the list view. Before this fix,
+  // personal events were only merged inside getUpcomingEvents(), which is
+  // what feeds the list — the calendar used a separate data source
+  // (getEnabledHolidays() only) so personal events simply didn't exist
+  // in the calendar's world at all, with or without date ranges.
+  const peIcons = { tribute:'🎖️', memorial:'🕯️', celebration:'🎉', personal:'🎂' };
+  const personalAsEvents = (CFG.personalEvents || []).map(pe => ({
+    m: parseInt(pe.month),
+    d1: parseInt(pe.day),
+    d2: parseInt(pe.d2 || pe.day),
+    name: pe.name,
+    cat: 'personal',
+    icon: peIcons[pe.eventType] || '🎂',
+    colors: pe.colors,
+    type: pe.eventType || 'personal'
+  }));
+  const allCalEvents = [...holidays, ...personalAsEvents];
+
   // Build a day→events map for this month and the adjacent ones
   function eventsForDay(m, d) {
-    return holidays.filter(h =>
+    return allCalEvents.filter(h =>
       h.m === m && d >= h.d1 && d <= h.d2 && !skipped.includes(h.name)
     );
   }
@@ -3936,7 +3955,7 @@ function renderCalView(now) {
     cell.onclick = () => {
       calSelectedDate = { y: calViewYear, m: calViewMonth, d };
       renderCalView(now);
-      renderCalAgenda(holidays, skipped);
+      renderCalAgenda(allCalEvents, skipped);
     };
     grid.appendChild(cell);
   }
@@ -3951,10 +3970,10 @@ function renderCalView(now) {
     grid.appendChild(cell);
   }
 
-  renderCalAgenda(holidays, skipped);
+  renderCalAgenda(allCalEvents, skipped);
 }
 
-function renderCalAgenda(holidays, skipped) {
+function renderCalAgenda(allCalEvents, skipped) {
   const agenda = document.getElementById('cal-agenda');
   if (!agenda) return;
 
@@ -3966,7 +3985,7 @@ function renderCalAgenda(holidays, skipped) {
   const rows = [];
   for (let d = 1; d <= dpm; d++) {
     if (filterD && d !== filterD) continue;
-    holidays.forEach(h => {
+    allCalEvents.forEach(h => {
       if (h.m === filterM && d >= h.d1 && d <= h.d2 && !skipped.includes(h.name)) {
         if (d === h.d1 || (filterD && d === filterD)) {
           rows.push({ d, h });
