@@ -2067,6 +2067,11 @@ footer a:hover { color: var(--cyan); border-color: var(--cyan); }
         <label>Day</label>
         <input type="number" id="pe-day" min="1" max="31" placeholder="15">
       </div>
+      <div class="field">
+        <label>End Day <span style="color:var(--muted);font-size:11px;font-weight:400">(optional — leave blank for a single night)</span></label>
+        <input type="number" id="pe-day2" min="1" max="31" placeholder="same day">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Must be in the same month. Each night in the range fires independently so you can skip or customize individual nights.</div>
+      </div>
     </div>
     <div class="field">
       <label>Color(s) — click to add</label>
@@ -3170,7 +3175,9 @@ function getNightSegments(now, light) {
 
   if (!awares.length) {
     // Personal event?
-    const personal = CFG.personalEvents?.find(e => parseInt(e.month)===m && parseInt(e.day)===d && !skipped.includes(e.name));
+    // Range-aware match: if d2 exists the event fires every night from day to d2 (same month only).
+    // The (e.d2 || e.day) fallback means events saved before this feature existed still work as single-day.
+    const personal = CFG.personalEvents?.find(e => parseInt(e.month)===m && d>=parseInt(e.day) && d<=(parseInt(e.d2||e.day)) && !skipped.includes(e.name));
     if (personal) {
       const peIcons = { tribute:'🎖️', memorial:'🕯️', celebration:'🎉', personal:'🎂' };
       const peIcon  = peIcons[personal.eventType] || '🎂';
@@ -3219,30 +3226,41 @@ function getUpcomingEvents(now, days=45) {
   const holidays = getEnabledHolidays();
   // Add personal events too
   const peIcons = { tribute:'🎖️', memorial:'🕯️', celebration:'🎉', personal:'🎂' };
-  const allEvents = [...holidays, ...(CFG.personalEvents||[]).map(pe => ({
-    m: parseInt(pe.month), d1: parseInt(pe.day), d2: parseInt(pe.day),
-    name: pe.name, cat:'personal', type: pe.eventType || 'personal',
-    icon: peIcons[pe.eventType] || '🎂', colors: pe.colors
-  }))];
+  const allEvents = [...holidays, ...(CFG.personalEvents||[]).map(pe => {
+    const d2 = parseInt(pe.d2 || pe.day);
+    const isPersonalRange = d2 !== parseInt(pe.day);
+    return {
+      m: parseInt(pe.month), d1: parseInt(pe.day), d2,
+      name: pe.name, cat:'personal', type: pe.eventType || 'personal',
+      icon: peIcons[pe.eventType] || '🎂', colors: pe.colors,
+      isPersonalRange  // flag: this is a short user-defined range, show each day individually
+    };
+  })];
   for (let i = 0; i <= days; i++) {
     const d = new Date(now); d.setDate(d.getDate()+i);
     const m = d.getMonth()+1, day = d.getDate();
     for (const h of allEvents) {
       if (h.m === m && day >= h.d1 && day <= h.d2) {
         const isMultiDay = h.d1 !== h.d2;
-        if (isMultiDay && day > h.d1 && i > 0) continue;
+        // Skip subsequent days of built-in multi-day events (prevents Pride Month
+        // repeating 30 times). Personal event ranges are explicitly NOT skipped —
+        // the user chose a range and each individual night should appear so they
+        // can skip or customize individual nights within it.
+        if (isMultiDay && day > h.d1 && i > 0 && !h.isPersonalRange) continue;
         events.push({ date: new Date(d), ...h, isToday: i===0 });
-        // Used to stop at the first match per future day, which hid genuine
-        // same-day collisions like Litha landing on Father's Day in 2026.
-        // The multi-day skip above already prevents a month-long event from
-        // repeating every day, so nothing further needs limiting here.
       }
     }
   }
   const seen = new Set();
   return events.filter(e => {
-    if (seen.has(e.name) && !e.isToday) return false;
-    seen.add(e.name); return true;
+    // Regular events deduplicate by name (prevents same holiday appearing twice).
+    // Personal range events deduplicate by name+date so each night in a range
+    // gets its own row in the list — that's the whole point of the feature.
+    const key = e.isPersonalRange
+      ? e.name + ':' + e.date.toISOString().slice(0,10)
+      : e.name;
+    if (seen.has(key) && !e.isToday) return false;
+    seen.add(key); return true;
   });
 }
 
@@ -4690,7 +4708,7 @@ function renderSettingsTab() {
     const color = pe.colors?.[0] || '#FF69B4';
     return `<div class="personal-event-item">
       <div class="pe-swatch" style="background:${color}"></div>
-      <div class="pe-info"><div class="pe-name">${pe.name}</div><div class="pe-date">${monthName(parseInt(pe.month))} ${pe.day}${pe.repeat?' · yearly':''}</div></div>
+      <div class="pe-info"><div class="pe-name">${pe.name}</div><div class="pe-date">${monthName(parseInt(pe.month))} ${pe.day}${pe.d2 && pe.d2 !== pe.day ? '-' + pe.d2 : ''}${pe.repeat?' · yearly':''}</div></div>
       <button class="btn btn-danger btn-sm" onclick="deletePersonal(${i})">✕</button>
     </div>`;
   }).join('') || `<div style="color:var(--muted);font-size:12px;padding:8px 0">No personal events yet.</div>`;
@@ -5101,6 +5119,7 @@ function openAddPersonal() {
   document.getElementById('pe-name').value  = '';
   document.getElementById('pe-month').value = new Date().getMonth()+1;
   document.getElementById('pe-day').value   = '';
+  document.getElementById('pe-day2').value  = '';
   document.getElementById('pe-chips').innerHTML = '';
   document.getElementById('pe-repeat').checked  = true;
   openModal('modal-personal');
@@ -5177,12 +5196,18 @@ function savePersonalEvent() {
   const name      = document.getElementById('pe-name').value.trim();
   const month     = document.getElementById('pe-month').value;
   const day       = document.getElementById('pe-day').value;
+  const day2Raw   = document.getElementById('pe-day2')?.value;
   const repeat    = document.getElementById('pe-repeat').checked;
   const eventType = document.getElementById('pe-type')?.value || 'personal';
   if (!name || !day) { alert('Name and day are required.'); return; }
+  // Validate end day if provided: must be >= start day (cross-month not supported, same month only)
+  const d2 = day2Raw ? parseInt(day2Raw) : null;
+  if (d2 && d2 < parseInt(day)) { alert("End Day must be on or after the Start Day. Cross-month ranges are not supported — add two separate events for that."); return; }
   if (selectedPeColors.length === 0) selectedPeColors = [document.getElementById('pe-color-picker').value];
   if (!CFG.personalEvents) CFG.personalEvents = [];
-  CFG.personalEvents.push({ name, month, day: parseInt(day), colors: selectedPeColors, repeat, eventType });
+  const eventData = { name, month, day: parseInt(day), colors: selectedPeColors, repeat, eventType };
+  if (d2 && d2 !== parseInt(day)) eventData.d2 = d2;  // only store d2 if it's actually different
+  CFG.personalEvents.push(eventData);
   saveConfig();
   closeModal('modal-personal');
   if (settingsViewActive) renderSettingsTab();
