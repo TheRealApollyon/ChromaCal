@@ -4533,7 +4533,17 @@ async function fire21GunSalute() {
   } finally {
     saluteActive = false;
     if (btn) { btn.textContent = '🎖️ 21 Gun Salute · 3 volleys + Taps'; btn.disabled = false; }
-    // Resume normal schedule
+    // Clear _lastFireKey for every participating light before calling update().
+    // Without this, update() sees the current schedule key was "already fired"
+    // (it was, hours ago when tonight's colors first started) and only republishes
+    // to the bridge entity rather than sending a direct lightOn command. The
+    // Blueprint picks that up eventually — but up to 60 seconds later, so the
+    // lights stay off until then. Clearing the key forces update() to treat the
+    // current scheduled state as "needs firing" and sends lightOn immediately.
+    lights.forEach(l => {
+      const key = l.name || l.entity;
+      delete _lastFireKey[key];
+    });
     update();
   }
 }
