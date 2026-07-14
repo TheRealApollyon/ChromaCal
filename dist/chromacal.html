@@ -2577,6 +2577,8 @@ let sunsetH = null; // cached sunset hour for tonight (decimal, e.g. 20.48 = 20:
 let _lastFireKey  = {};  // lightName → last fired key
 let _schedOverride = {}; // lightName → {until: Date, reason: string} (manual override suppresses auto)
 let _loggedExternalOverride = false; // throttles the external-override log line to once per activation, not every 30s
+let _brightnessLowCount  = {}; // lightKey → consecutive cycles where brightness was below threshold
+let _lastCommandFiredAt  = {}; // lightKey → timestamp when ChromaCal last sent a command (for settling window)
 const OVERRIDE_MINS = 30; // manual overrides suppress auto-fire for 30 minutes
 
 // ── BRIDGE CACHE ──────────────────────────────────────────────────────────────
@@ -3512,6 +3514,7 @@ async function update() {
       }
       if (desiredKey !== _lastFireKey[lightKey] && desiredKey !== 'pre' && desiredKey !== 'warmup') {
           _lastFireKey[lightKey] = desiredKey;
+          _lastCommandFiredAt[lightKey] = Date.now(); // record when we fired, for brightness settling window
           fireScheduledCommand(desiredKey, light, segsNow, now);
           // Note: syncBridgeHelper is called inside fireScheduledCommand
         } else {
@@ -3519,6 +3522,52 @@ async function update() {
           // This ensures the Blueprint has fresh data after any HA restart
           syncBridgeHelper(desiredKey || _lastFireKey[lightKey] || 'pre', light, segsNow, now, false);
         }
+      }
+    }
+
+    // ── BRIGHTNESS VERIFICATION ───────────────────────────────────────────────
+    // Every cycle, if ChromaCal is actively driving a light (not in the pre/
+    // warmup handover phase, not in Emergency or Salute, not overridden), check
+    // whether the light actually reached full brightness. Zigbee bulbs can get
+    // stuck mid-ramp due to mesh latency, firmware quirks, or command collisions.
+    //
+    // brightness: 254 is the real Zigbee hardware maximum (0xFF is reserved in
+    // the ZLL spec as a "keep current" sentinel, so bulbs cap at 254). We use
+    // 253 as the threshold to allow for one step of rounding without false alarms.
+    //
+    // Only check after a 45-second settling window since the last command — a
+    // 30-second color fade-in needs time to complete before we'd see the final
+    // value. Checking mid-transition would always read below 100% and cause
+    // spurious corrections.
+    //
+    // Logging: silent on first detection (might be a one-off). Log a warning
+    // after 3 consecutive low readings (90 seconds of persistent under-brightness
+    // despite correction). Counter resets after logging to avoid spam.
+    {
+      const BRIGHTNESS_THRESHOLD  = 253;   // brightness: 254 is Zigbee max; 253 avoids rounding false alarms
+      const BRIGHTNESS_SETTLE_MS  = 45000; // wait 45s after last command before checking (covers 30s fade-in)
+      const BRIGHTNESS_LOG_AFTER  = 3;     // log warning after this many consecutive low cycles (~90s)
+
+      const activePhase = desiredKey && desiredKey !== 'pre' && desiredKey !== 'warmup';
+      const msSinceCmd  = Date.now() - (_lastCommandFiredAt[lightKey] || 0);
+      const canCheck    = activePhase && isOn && !emgActive && !saluteActive
+                          && !isOverridden && msSinceCmd > BRIGHTNESS_SETTLE_MS;
+
+      if (canCheck) {
+        const currentBri = state.attributes?.brightness || 0;
+        if (currentBri < BRIGHTNESS_THRESHOLD) {
+          _brightnessLowCount[lightKey] = (_brightnessLowCount[lightKey] || 0) + 1;
+          // Always send a silent corrective snap
+          lightOn(light.entity, { brightness_pct: 100, transition: 2 }).catch(() => {});
+          if (_brightnessLowCount[lightKey] >= BRIGHTNESS_LOG_AFTER) {
+            addLog(`⚠️ ${light.name || light.entity}: brightness at ${Math.round(currentBri/255*100)}% — correcting (${_brightnessLowCount[lightKey]} cycles)`, 'warn');
+            _brightnessLowCount[lightKey] = 0; // reset after logging so it won't spam
+          }
+        } else {
+          _brightnessLowCount[lightKey] = 0; // back to full — reset the counter
+        }
+      } else if (!activePhase) {
+        _brightnessLowCount[lightKey] = 0; // not in an active phase — don't carry count forward
       }
     }
 
