@@ -1,0 +1,11 @@
+{
+  "domain": "chromacal",
+  "name": "ChromaCal",
+  "version": "2.0.0",
+  "config_flow": true,
+  "documentation": "https://github.com/TheRealApollyon/chromacal",
+  "issue_tracker": "https://github.com/TheRealApollyon/chromacal/issues",
+  "codeowners": ["@TheRealApollyon"],
+  "iot_class": "calculated",
+  "requirements": []
+}

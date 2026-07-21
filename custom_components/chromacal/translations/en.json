@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Your region",
+        "description": "Sets your primary holiday calendar. You can blend in other regions later.",
+        "data": {
+          "region": "Region"
+        }
+      },
+      "categories": {
+        "title": "What matters to your home",
+        "description": "Pick what you want ChromaCal to celebrate. Nothing runs until you choose it. Change anytime later.",
+        "data": {
+          "categories": "Categories"
+        }
+      },
+      "light": {
+        "title": "Add your first light",
+        "description": "Works with any light entity — porch, living room, bedroom. You can add more later.",
+        "data": {
+          "name": "Light name",
+          "zone": "Zone (optional)",
+          "entity": "HA entity",
+          "start_type": "Turn on",
+          "start_time": "Start time (if \"time\" selected above)",
+          "end_type": "Turn off",
+          "end_time": "End time (if \"time\" selected above)",
+          "fade_in": "Fade in (seconds)",
+          "fade_out": "Fade out (seconds)",
+          "warmwhite_time": "Warm white cutoff time",
+          "warmwhite_enabled": "Enable warm white cutoff"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "ChromaCal is already configured. Add more lights from the integration's options."
+    }
+  }
+}
