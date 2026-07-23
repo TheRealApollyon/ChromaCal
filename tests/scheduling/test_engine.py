@@ -10,11 +10,12 @@ from scheduling.engine import (
     LightConfig,
     PersonalEvent,
     ScheduleConfig,
+    get_current_segment,
     get_enabled_holidays,
     get_night_segments,
     resolve_tier_winner,
 )
-from scheduling.models import HolidayEvent
+from scheduling.models import HolidayEvent, NightSegment, SegmentEvent
 
 # ── get_enabled_holidays ─────────────────────────────────────────────────────
 
@@ -203,3 +204,39 @@ def test_start_offset_delays_color_start_after_sunset():
     holiday = HolidayEvent(11, 10, 10, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")
     segments = get_night_segments(NOW, light, ScheduleConfig(), [holiday], sunset_hour=18.0)
     assert segments[0].start_hour == pytest.approx(18.5)  # 18:00 sunset + 30min offset
+
+
+# ── get_current_segment ──────────────────────────────────────────────────────
+
+EVENT_ONE = SegmentEvent("One", ("#111111",), "awareness", "💙")
+EVENT_TWO = SegmentEvent("Two", ("#222222",), "awareness", "💙")
+EVENT_THREE = SegmentEvent("Three", ("#333333",), "awareness", "💙")
+SPLIT_SEGMENTS = [
+    NightSegment(EVENT_ONE, 18.0, 19.5),
+    NightSegment(EVENT_TWO, 19.5, 21.0),
+    NightSegment(EVENT_THREE, 21.0, 22.5),
+]
+
+
+def test_current_segment_picks_the_one_matching_now_hour():
+    assert get_current_segment(SPLIT_SEGMENTS, 20.0).event.name == "Two"
+
+
+def test_current_segment_start_boundary_is_inclusive():
+    assert get_current_segment(SPLIT_SEGMENTS, 21.0).event.name == "Three"
+
+
+def test_current_segment_end_boundary_is_exclusive():
+    assert get_current_segment(SPLIT_SEGMENTS, 19.5).event.name == "Two"
+
+
+def test_current_segment_falls_back_to_first_when_before_window():
+    assert get_current_segment(SPLIT_SEGMENTS, 10.0).event.name == "One"
+
+
+def test_current_segment_falls_back_to_first_when_after_window():
+    assert get_current_segment(SPLIT_SEGMENTS, 23.0).event.name == "One"
+
+
+def test_current_segment_none_for_empty_list():
+    assert get_current_segment([], 20.0) is None

@@ -218,3 +218,17 @@ def get_night_segments(
         NightSegment(_to_segment_event(h), color_start_h + i * per_h, color_start_h + (i + 1) * per_h)
         for i, h in enumerate(awares)
     ]
+
+
+def get_current_segment(segments: list[NightSegment], now_hour: float) -> NightSegment | None:
+    """Which of tonight's segments is active right now?
+
+    Ports getCurrentSegment() from chromacal.html. Falls back to the first
+    segment if none match (e.g. now_hour is before the window starts or
+    after the last segment ends) -- get_night_segments() always returns at
+    least one segment, so this only returns None for an empty list.
+    """
+    for segment in segments:
+        if segment.start_hour <= now_hour < segment.end_hour:
+            return segment
+    return segments[0] if segments else None
