@@ -55,7 +55,15 @@ class ScheduleConfig:
 
 @dataclass(frozen=True)
 class LightConfig:
-    """The subset of a light's config that get_night_segments needs."""
+    """The subset of a light's config that get_night_segments/
+    get_desired_fire_key/build_fire_command need.
+
+    warmwhite_kelvin_mireds and warmwhite_color aren't collected by any
+    config flow yet (Phase 1's wizard doesn't ask for them) -- they exist
+    here so build_fire_command() has an honest, named dependency instead of
+    a magic number buried in command-construction logic, matching v1's
+    warmwhiteKelvin/warmwhiteColor fields and their same defaults.
+    """
 
     name: str = ""
     end_type: str = "time"
@@ -63,6 +71,10 @@ class LightConfig:
     start_offset: int = 0
     warmwhite_enabled: bool = True
     warmwhite_time: str | None = "22:00"
+    fade_in: int = 30
+    fade_out: int = 120
+    warmwhite_kelvin_mireds: int = 250
+    warmwhite_color: str | None = None
 
 
 def get_enabled_holidays(config: ScheduleConfig, year: int) -> list[HolidayEvent]:
@@ -232,3 +244,48 @@ def get_current_segment(segments: list[NightSegment], now_hour: float) -> NightS
         if segment.start_hour <= now_hour < segment.end_hour:
             return segment
     return segments[0] if segments else None
+
+
+def get_desired_fire_key(
+    now: datetime,
+    light: LightConfig,
+    segments: list[NightSegment],
+    sunset_hour: float | None,
+) -> str:
+    """What SHOULD be happening right now for this light?
+
+    Ports getDesiredFireKey() from chromacal.html. Returns one of:
+    'off' | 'warmwhite' | f'event:{name}' | 'default' | 'warmup' | 'pre'.
+    'warmup' and 'pre' mean "do nothing" -- an existing sunset/sunrise
+    automation is assumed to handle that phase, matching v1.
+
+    Deliberately uses its own fallback (20.0) when sunset_hour is None,
+    NOT get_night_segments' fallback (the current hour) -- that mismatch
+    exists in v1 itself (getDesiredFireKey and getNightSegments read
+    different sunsetH defaults), so it's preserved here rather than
+    quietly unified.
+    """
+    now_hour = now.hour + now.minute / 60
+    cfg_end = 23
+    if light.end_type == "time" and light.end_time:
+        try:
+            cfg_end = int(light.end_time.split(":")[0])
+        except ValueError:
+            cfg_end = 23
+    start_offset_min = light.start_offset or 0
+    approx_sunset_h = sunset_hour if sunset_hour is not None else 20.0
+    color_start_h = approx_sunset_h + start_offset_min / 60
+    ww_h = None
+    if light.warmwhite_enabled and light.warmwhite_time:
+        ww_h = _parse_hour(light.warmwhite_time)
+
+    if now_hour >= cfg_end:
+        return "off"
+    if ww_h is not None and now_hour >= ww_h:
+        return "warmwhite"
+    if now_hour >= color_start_h:
+        current = get_current_segment(segments, now_hour)
+        return f"event:{current.event.name}" if current else "default"
+    if now_hour >= approx_sunset_h:
+        return "warmup"
+    return "pre"

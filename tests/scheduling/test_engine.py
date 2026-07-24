@@ -11,6 +11,7 @@ from scheduling.engine import (
     PersonalEvent,
     ScheduleConfig,
     get_current_segment,
+    get_desired_fire_key,
     get_enabled_holidays,
     get_night_segments,
     resolve_tier_winner,
@@ -240,3 +241,50 @@ def test_current_segment_falls_back_to_first_when_after_window():
 
 def test_current_segment_none_for_empty_list():
     assert get_current_segment([], 20.0) is None
+
+
+# ── get_desired_fire_key ──────────────────────────────────────────────────────
+
+FIRE_LIGHT = LightConfig(name="Porch", end_type="time", end_time="23:00", warmwhite_enabled=True, warmwhite_time="22:00")
+FIRE_EVENT = HolidayEvent(7, 1, 31, "Some Awareness Month", "awareness", "💙", ("#111111",), "awareness")
+
+
+def test_desired_key_off_after_end_time():
+    now = datetime(2026, 7, 23, 23, 0)
+    segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, FIRE_LIGHT, segments, 18.0) == "off"
+
+
+def test_desired_key_warmwhite_after_warmwhite_time():
+    now = datetime(2026, 7, 23, 22, 30)
+    segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, FIRE_LIGHT, segments, 18.0) == "warmwhite"
+
+
+def test_desired_key_event_during_color_window():
+    now = datetime(2026, 7, 23, 20, 0)
+    segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, FIRE_LIGHT, segments, 18.0) == "event:Some Awareness Month"
+
+
+def test_desired_key_warmup_between_sunset_and_color_start():
+    # start_offset delays color start past sunset -- the gap in between is 'warmup'
+    light = LightConfig(name="Porch", end_type="time", end_time="23:00", start_offset=30)
+    now = datetime(2026, 7, 23, 18, 10)
+    segments = get_night_segments(now, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, light, segments, 18.0) == "warmup"
+
+
+def test_desired_key_pre_before_sunset():
+    now = datetime(2026, 7, 23, 12, 0)
+    segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, FIRE_LIGHT, segments, 18.0) == "pre"
+
+
+def test_desired_key_uses_its_own_20h_fallback_when_sunset_is_none():
+    # Unlike get_night_segments (falls back to "now"), getDesiredFireKey
+    # falls back to a hardcoded 20.0 when sunset_hour is None -- ported
+    # faithfully as a real v1 inconsistency, not unified.
+    now = datetime(2026, 7, 23, 19, 0)
+    segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=None)
+    assert get_desired_fire_key(now, FIRE_LIGHT, segments, None) == "pre"  # 19:00 < 20.0 fallback

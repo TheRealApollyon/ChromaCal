@@ -47,6 +47,8 @@ def test_build_light_config_reads_expected_keys():
         "end_time": "23:00",
         "warmwhite_enabled": True,
         "warmwhite_time": "22:00",
+        "fade_in": 15,
+        "fade_out": 60,
     }
     light = build_light_config(light_data)
     assert light.name == "Front Porch"
@@ -55,6 +57,8 @@ def test_build_light_config_reads_expected_keys():
     assert light.warmwhite_enabled is True
     assert light.warmwhite_time == "22:00"
     assert light.start_offset == 0
+    assert light.fade_in == 15
+    assert light.fade_out == 60
 
 
 def test_build_light_config_falls_back_to_defaults_for_missing_keys():
@@ -64,3 +68,5 @@ def test_build_light_config_falls_back_to_defaults_for_missing_keys():
     assert light.end_time is None
     assert light.warmwhite_enabled is True
     assert light.warmwhite_time is None
+    assert light.fade_in == 30
+    assert light.fade_out == 120

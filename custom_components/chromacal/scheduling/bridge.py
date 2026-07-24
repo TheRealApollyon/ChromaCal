@@ -6,7 +6,7 @@ Deliberately uses the light-config dict's literal string keys ("name",
 const.py lives one level up in custom_components/chromacal/, and reaching it
 would need a `..const` relative import — which breaks the "scheduling/ is
 importable as its own top-level package" trick tests/scheduling/ relies on
-to stay Docker-free (see pytest.ini's pythonpath entry). These 5 keys are
+to stay Docker-free (see pytest.ini's pythonpath entry). These keys are
 config_flow.py's own CONF_* values; keep them in sync if those ever change.
 """
 
@@ -50,9 +50,11 @@ def build_schedule_config(
 def build_light_config(light_data: dict[str, Any]) -> LightConfig:
     """Build a LightConfig from one entry in a config entry's `lights` list.
 
-    start_offset isn't collected by the Phase 1 wizard (it's an advanced
-    field deferred to a later options flow), so it defaults to 0 here rather
-    than reading a config key that doesn't exist yet.
+    start_offset, warmwhite_kelvin_mireds, and warmwhite_color aren't
+    collected by the Phase 1 wizard (advanced fields deferred to a later
+    options flow), so they default rather than reading config keys that
+    don't exist yet. fade_in/fade_out ARE collected by the wizard and read
+    here for real.
     """
     return LightConfig(
         name=light_data.get("name", ""),
@@ -61,4 +63,6 @@ def build_light_config(light_data: dict[str, Any]) -> LightConfig:
         start_offset=0,
         warmwhite_enabled=light_data.get("warmwhite_enabled", True),
         warmwhite_time=light_data.get("warmwhite_time"),
+        fade_in=light_data.get("fade_in", 30),
+        fade_out=light_data.get("fade_out", 120),
     )
