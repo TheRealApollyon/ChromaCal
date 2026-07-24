@@ -15,18 +15,30 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import homeassistant.util.dt as dt_util
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import CONF_ENTITY, DOMAIN
 from .scheduling.bridge import build_light_config, build_schedule_config
-from .scheduling.engine import get_current_segment, get_enabled_holidays, get_night_segments
+from .scheduling.engine import (
+    LightConfig,
+    get_current_segment,
+    get_desired_fire_key,
+    get_enabled_holidays,
+    get_night_segments,
+)
+from .scheduling.fire import build_fire_command
 from .scheduling.models import NightSegment
 from .scheduling.sunset import resolve_sunset_hour
+
+# Desired-fire-keys that mean "do nothing" -- an existing sunset/sunrise
+# automation is assumed to handle these phases, matching v1.
+_NO_FIRE_KEYS = ("pre", "warmup")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +76,12 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # more often than once a day (see the Phase 3 plan discussion).
         self.sunset_hour: float | None = None
         self.sunset_date: date | None = None
+        # Last desired-fire-key actually fired per light, matching v1's
+        # _lastFireKey -- lives here, not a bare module global, same
+        # discipline as the sunset cache above. Keyed by light_entity, the
+        # same key used everywhere else on this coordinator (coordinator.data,
+        # the sensor's unique_id), not v1's "name || entity" fallback.
+        self._last_fire_key: dict[str, str] = {}
 
     def _resolve_sunset(self) -> float | None:
         """Return today's sunset as a decimal hour, cached once per day.
@@ -128,4 +146,75 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                     current.end_hour,
                 )
 
+            await self._auto_fire(light_entity, light, segments, sunset_hour, now)
+
         return result
+
+    async def _auto_fire(
+        self,
+        light_entity: str,
+        light: LightConfig,
+        segments: list[NightSegment],
+        sunset_hour: float | None,
+        now: datetime,
+    ) -> None:
+        """Fire a light.turn_on/turn_off when the desired state has changed.
+
+        Ports getDesiredFireKey()/fireScheduledCommand()'s firing decision
+        from chromacal.html, scoped to state-change firing only -- multi-color
+        cycling is a named follow-up, not ported here (see scheduling/fire.py's
+        module docstring for why fireScheduledCommand alone never produced
+        that in v1 either).
+        """
+        if not light_entity:
+            return
+
+        desired_key = get_desired_fire_key(now, light, segments, sunset_hour)
+
+        if light_entity not in self._last_fire_key:
+            # First-update guard, ported faithfully: observe what SHOULD be
+            # happening without firing, so a fresh coordinator (HA startup)
+            # doesn't immediately re-fire a command that's probably already
+            # correct. Matches v1's page-load behavior exactly.
+            self._last_fire_key[light_entity] = (
+                desired_key if desired_key in _NO_FIRE_KEYS else "__init__"
+            )
+            _LOGGER.info(
+                "ChromaCal: %s auto-fire initialized, observing (no fire on first load)",
+                light.name or light_entity,
+            )
+            return
+
+        if desired_key in _NO_FIRE_KEYS or desired_key == self._last_fire_key[light_entity]:
+            return
+
+        command = build_fire_command(desired_key, light, segments, now)
+        if command is None:
+            return
+
+        self._last_fire_key[light_entity] = desired_key
+        try:
+            await self.hass.services.async_call(
+                command.domain,
+                command.service,
+                {"entity_id": light_entity, **command.service_data},
+                blocking=True,
+            )
+            _LOGGER.info(
+                "ChromaCal: fired %s.%s on %s (%s) -> %s",
+                command.domain,
+                command.service,
+                light.name or light_entity,
+                desired_key,
+                command.service_data,
+            )
+        except HomeAssistantError as err:
+            # Mirrors v1's catch(e) around fireScheduledCommand -- a failed
+            # service call (entity unavailable, etc.) shouldn't crash the
+            # whole coordinator update. Deliberately narrower than v1's bare
+            # catch: an unexpected error in this method's own logic (not a
+            # service-call failure) should still surface loudly rather than
+            # being swallowed, per CLAUDE.md's known-failure-pattern note.
+            _LOGGER.error(
+                "ChromaCal: auto-fire error for %s: %s", light.name or light_entity, err
+            )
