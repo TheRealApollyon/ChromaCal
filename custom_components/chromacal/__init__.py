@@ -13,13 +13,22 @@ needed in async_unload_entry.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
 from .coordinator import ChromaCalCoordinator
 
 PLATFORMS: list[str] = ["sensor"]
+
+# v1's real cadence for multi-color cycling, inherited from the Blueprint
+# automation it relied on (see coordinator.py's async_recheck_color_cycle).
+# Deliberately separate from the coordinator's own 5-minute UPDATE_INTERVAL.
+COLOR_CYCLE_INTERVAL = timedelta(seconds=60)
 
 type ChromaCalConfigEntry = ConfigEntry[ChromaCalCoordinator]
 
@@ -35,6 +44,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+
+    async def _recheck_color_cycle(_now) -> None:
+        await coordinator.async_recheck_color_cycle(dt_util.now())
+
+    entry.async_on_unload(
+        async_track_time_interval(hass, _recheck_color_cycle, COLOR_CYCLE_INTERVAL)
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

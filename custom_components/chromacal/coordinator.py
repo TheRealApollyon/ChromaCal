@@ -9,6 +9,12 @@ to a Catch Up/Sync button (Phase 5+) whose entire job is
 `coordinator.async_request_refresh()` -- building the coordinator now means
 that button, and any switch/button entities that share this same resolved
 schedule, are nearly free later instead of requiring a refactor then.
+
+Multi-color event cycling (the gap flagged in Phase 4) runs on a separate,
+faster ~60s interval -- see async_recheck_color_cycle() and __init__.py's
+registration of it -- since it's designed to advance roughly once a minute
+and this coordinator's own 5-minute cadence would only sample a fraction
+of the cycle, not restore it.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from .scheduling.engine import (
     get_enabled_holidays,
     get_night_segments,
 )
-from .scheduling.fire import build_fire_command
+from .scheduling.fire import FireCommand, build_fire_command
 from .scheduling.models import NightSegment
 from .scheduling.sunset import resolve_sunset_hour
 
@@ -82,6 +88,13 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # same key used everywhere else on this coordinator (coordinator.data,
         # the sensor's unique_id), not v1's "name || entity" fallback.
         self._last_fire_key: dict[str, str] = {}
+        # Last color actually fired for a stable multi-color 'event:X' key,
+        # keyed by light_entity -- lets the color-cycle recheck (see
+        # async_recheck_color_cycle) detect "has the color-in-cycle advanced"
+        # independently of the coarse key-change gate above. Always read with
+        # .get(), never [] -- "not yet seeded" (a light's first-ever fire) is
+        # a real, expected state, not a bug.
+        self._last_fired_rgb_color: dict[str, list[int]] = {}
 
     def _resolve_sunset(self) -> float | None:
         """Return today's sunset as a decimal hour, cached once per day.
@@ -158,13 +171,15 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         sunset_hour: float | None,
         now: datetime,
     ) -> None:
-        """Fire a light.turn_on/turn_off when the desired state has changed.
+        """Fire a light.turn_on/turn_off when the desired state (the coarse
+        tier/event key) has changed.
 
         Ports getDesiredFireKey()/fireScheduledCommand()'s firing decision
-        from chromacal.html, scoped to state-change firing only -- multi-color
-        cycling is a named follow-up, not ported here (see scheduling/fire.py's
-        module docstring for why fireScheduledCommand alone never produced
-        that in v1 either).
+        from chromacal.html. Only owns key transitions -- advancing the
+        active color within a stable multi-color key is
+        async_recheck_color_cycle()'s job, not this method's (see
+        scheduling/fire.py's module docstring for why fireScheduledCommand
+        alone never produced that in v1 either).
         """
         if not light_entity:
             return
@@ -189,10 +204,30 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             return
 
         command = build_fire_command(desired_key, light, segments, now)
+
+        # All state mutation happens here, synchronously, before the await
+        # below -- not after. None of these statements themselves await, so
+        # asyncio can't interleave another callback (e.g. the 60s color-cycle
+        # recheck) partway through them: by the time control could possibly
+        # yield to another coroutine, _last_fire_key and _last_fired_rgb_color
+        # are already mutually consistent. Seeding after the await would
+        # leave a real window where a key transition was visible but its
+        # color wasn't yet recorded -- see the Phase 4c plan discussion.
+        self._last_fire_key[light_entity] = desired_key
+        if command is not None and "rgb_color" in command.service_data:
+            self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
+        else:
+            self._last_fired_rgb_color.pop(light_entity, None)
+
         if command is None:
             return
 
-        self._last_fire_key[light_entity] = desired_key
+        await self._call_fire_command(light_entity, light, desired_key, command)
+
+    async def _call_fire_command(
+        self, light_entity: str, light: LightConfig, key: str, command: FireCommand
+    ) -> None:
+        """Issue the actual service call and log the result or failure."""
         try:
             await self.hass.services.async_call(
                 command.domain,
@@ -205,7 +240,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 command.domain,
                 command.service,
                 light.name or light_entity,
-                desired_key,
+                key,
                 command.service_data,
             )
         except HomeAssistantError as err:
@@ -218,3 +253,48 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             _LOGGER.error(
                 "ChromaCal: auto-fire error for %s: %s", light.name or light_entity, err
             )
+
+    async def async_recheck_color_cycle(self, now: datetime) -> None:
+        """Re-fire a stable multi-color 'event:X' key when its active color
+        has advanced since it was last sent.
+
+        Runs on its own ~60s interval (see __init__.py), decoupled from this
+        coordinator's own 5-minute refresh: v1's real cadence for color
+        cycling (inherited from the Blueprint automation it relied on) was
+        ~60s, and checking only every 5 minutes would skip most of a cycle
+        rather than step through it. Reuses self.data (already computed by
+        the 5-minute refresh) instead of recomputing holidays/segments here
+        -- only the cheap "has the color changed" check runs fine-grained.
+
+        Only acts on a light whose coarse key is already an established
+        'event:X' matching what self.data currently shows -- if the schedule
+        has moved on since the key was set (a real transition mid-flight),
+        that mismatch is caught below and this is a safe no-op; the coarse
+        gate in _auto_fire owns transitions, this only owns color-within-key.
+        """
+        for light_entity, schedule in self.data.items():
+            last_key = self._last_fire_key.get(light_entity)
+            if not last_key or not last_key.startswith("event:"):
+                continue  # not currently driving a stable event window
+
+            current = schedule.current_segment
+            if current is None or f"event:{current.event.name}" != last_key:
+                continue  # stale relative to a transition in progress elsewhere; skip
+
+            light_data = next(
+                (l for l in self.lights if l.get(CONF_ENTITY) == light_entity), None
+            )
+            if light_data is None:
+                continue
+            light = build_light_config(light_data)
+
+            command = build_fire_command(last_key, light, schedule.segments, now)
+            if command is None or "rgb_color" not in command.service_data:
+                continue  # single-color event, or key no longer resolves -- nothing to cycle
+
+            if self._last_fired_rgb_color.get(light_entity) == command.service_data["rgb_color"]:
+                continue  # same color as last time -- nothing changed, don't refire
+
+            # Seed before the await, same reasoning as _auto_fire above.
+            self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
+            await self._call_fire_command(light_entity, light, last_key, command)

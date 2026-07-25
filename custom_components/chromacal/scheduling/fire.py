@@ -9,10 +9,12 @@ v1's real-world effective value is always 'balanced' (satMul=1, briMul=1,
 a no-op) -- skipping it here produces identical output to porting it and
 always hitting that no-op branch. Add it when that config surface exists.
 
-Also not ported: the ongoing multi-color cycling that v1 actually got from
-its bridge/Blueprint pub-sub path, not from repeated fireScheduledCommand
-calls (that function only fires once per key transition). See the Phase 4
-plan discussion -- explicitly deferred, not silently dropped.
+Ongoing multi-color cycling: v1 got that from its bridge/Blueprint pub-sub
+path, not from repeated fireScheduledCommand calls (that function only ever
+fired once per key transition). This module's build_fire_command() still
+only computes one color-index snapshot per call; the ~60s re-check that
+detects "has the index advanced" and re-invokes this to get the next color
+lives in coordinator.py's async_recheck_color_cycle(), not here.
 """
 
 from __future__ import annotations

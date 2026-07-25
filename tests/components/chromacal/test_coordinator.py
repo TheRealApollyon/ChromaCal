@@ -9,6 +9,7 @@ assertions.
 
 from __future__ import annotations
 
+import homeassistant.util.dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.chromacal.const import DOMAIN
@@ -121,3 +122,75 @@ async def test_auto_fire_sends_the_correct_event_color_command(hass, freezer):
     assert call.data["rgb_color"] == [220, 20, 60]
     assert call.data["brightness"] == 255
     assert call.data["transition"] == 30  # fade_in
+
+
+async def test_color_cycle_advances_on_recheck_after_a_minute_boundary(hass, freezer):
+    """The ~60s color-cycle recheck re-fires with the next color once
+    elapsed time crosses a new minute-of-cycle, without needing the coarse
+    key itself to change (that's the Phase 4c gap this closes)."""
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = await _setup_entry(hass, "test_color_cycle_advance")
+    assert len(turn_on_calls) == 0  # first refresh: observe only
+
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+
+    await coordinator.async_refresh()  # establishes event:Independence Day, fires index 0
+    await hass.async_block_till_done()
+    assert len(turn_on_calls) == 1
+    assert turn_on_calls[0].data["rgb_color"] == [220, 20, 60]  # #DC143C, index 0
+
+    # Segment starts at sunset_hour=20.0. A 1-minute jump is enough: at
+    # 21:01:30, elapsed = 61.5 minutes -> int(61.5) % 3 = 61 % 3 = 1 ->
+    # second color, #FFFFFF -> (255, 255, 255). Deliberately NOT a large
+    # jump -- crossing into warmwhite_time (22:00) would trip the coarse
+    # gate's own transition instead of (or in addition to) this recheck,
+    # which is a different code path than what this test is isolating.
+    # Also deliberately NOT exactly 21:01:00 (61.0 minutes on the nose) --
+    # that lands on the same float-precision boundary flagged in
+    # test_fire.py (1/60*3600 can round to 59.999...), which would make
+    # this test flake on the exact same class of bug, not a real one.
+    freezer.move_to("2026-07-04 21:01:30-05:00")
+    await coordinator.async_recheck_color_cycle(dt_util.now())
+    await hass.async_block_till_done()
+
+    assert len(turn_on_calls) == 2
+    call = turn_on_calls[1]
+    assert call.data["entity_id"] == LIGHT_ENTITY
+    assert call.data["rgb_color"] == [255, 255, 255]
+    assert call.data["brightness"] == 255
+    assert call.data["transition"] == 30
+
+
+async def test_color_cycle_recheck_does_not_refire_the_same_color(hass, freezer):
+    """Calling the recheck again with no elapsed-time change fires nothing
+    extra -- this is what stops it from refiring on every coordinator tick
+    regardless of whether the color actually changed."""
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = await _setup_entry(hass, "test_color_cycle_no_advance")
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert len(turn_on_calls) == 1
+
+    # Same frozen "now" as the fire above -- same color index.
+    await coordinator.async_recheck_color_cycle(dt_util.now())
+    await hass.async_block_till_done()
+
+    assert len(turn_on_calls) == 1
