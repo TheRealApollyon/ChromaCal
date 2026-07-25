@@ -560,6 +560,17 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         first-update guard would just re-observe and defer the actual fire
         by a full 5-minute cycle instead of firing immediately, which is
         worse than doing nothing.
+
+        Each light is resolved and fired inside its own try/except -- a
+        real gap found (via a broken debug-logging line, ironically)
+        during the Phase 5b cancel/Stop bug investigation: without this,
+        an exception resolving ANY one light (a bad config value, a
+        scheduling-logic edge case) aborted the fire for every other
+        configured light too, with nothing logged -- unlike
+        _call_fire_command's own narrower HomeAssistantError handling,
+        which only covers the service-call step, not the resolution steps
+        before it (build_light_config/get_night_segments/
+        get_desired_fire_key/build_fire_command).
         """
         now = dt_util.now()
         now_hour = now.hour + now.minute / 60
@@ -577,24 +588,30 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             light_entity = light_data.get(CONF_ENTITY, "")
             if not light_entity or (targets is not None and light_entity not in targets):
                 continue
-            light = build_light_config(light_data)
-            segments = get_night_segments(now, light, config, holidays, sunset_hour=sunset_hour)
-            desired_key = get_desired_fire_key(now, light, segments, sunset_hour)
-            if desired_key in _NO_FIRE_KEYS:
-                continue
+            try:
+                light = build_light_config(light_data)
+                segments = get_night_segments(now, light, config, holidays, sunset_hour=sunset_hour)
+                desired_key = get_desired_fire_key(now, light, segments, sunset_hour)
+                if desired_key in _NO_FIRE_KEYS:
+                    continue
 
-            command = build_fire_command(desired_key, light, segments, now)
+                command = build_fire_command(desired_key, light, segments, now)
 
-            # Reseed the gate before the await, same reasoning as _auto_fire.
-            self._last_fire_key[light_entity] = desired_key
-            if command is not None and "rgb_color" in command.service_data:
-                self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
-            else:
-                self._last_fired_rgb_color.pop(light_entity, None)
+                # Reseed the gate before the await, same reasoning as _auto_fire.
+                self._last_fire_key[light_entity] = desired_key
+                if command is not None and "rgb_color" in command.service_data:
+                    self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
+                else:
+                    self._last_fired_rgb_color.pop(light_entity, None)
 
-            if command is None:
-                continue
-            await self._call_fire_command(light_entity, light, desired_key, command)
+                if command is None:
+                    continue
+                await self._call_fire_command(light_entity, light, desired_key, command)
+            except Exception:
+                _LOGGER.exception(
+                    "ChromaCal: force-fire failed resolving %s -- other lights still processed",
+                    light_entity,
+                )
 
     def async_fire_and_forget(
         self, coro: Coroutine[Any, Any, None], name: str

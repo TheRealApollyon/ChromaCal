@@ -9,10 +9,14 @@ assertions.
 
 from __future__ import annotations
 
+import logging
+from unittest.mock import patch
+
 import homeassistant.util.dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.chromacal.const import DOMAIN
+from custom_components.chromacal.scheduling.fire import build_fire_command as real_build_fire_command
 
 LIGHT_ENTITY = "light.front_porch"
 
@@ -194,3 +198,90 @@ async def test_color_cycle_recheck_does_not_refire_the_same_color(hass, freezer)
     await hass.async_block_till_done()
 
     assert len(turn_on_calls) == 1
+
+
+# ── async_force_fire per-light exception isolation ──────────────────
+
+_TWO_LIGHT_ENTRY_DATA = {
+    "region": "us",
+    "categories": {"federal": True},
+    "lights": [
+        {
+            "name": "Front Porch",
+            "zone": "",
+            "entity": "light.front_porch",
+            "start_type": "sunset",
+            "start_time": "19:00",
+            "end_type": "time",
+            "end_time": "23:00",
+            "fade_in": 30,
+            "fade_out": 120,
+            "warmwhite_time": "22:00",
+            "warmwhite_enabled": True,
+        },
+        {
+            "name": "Back Yard",
+            "zone": "",
+            "entity": "light.back_yard",
+            "start_type": "sunset",
+            "start_time": "19:00",
+            "end_type": "time",
+            "end_time": "23:00",
+            "fade_in": 30,
+            "fade_out": 120,
+            "warmwhite_time": "22:00",
+            "warmwhite_enabled": True,
+        },
+    ],
+}
+
+
+def _broken_build_fire_command(key, light, segments, now):
+    """Simulates a real resolution failure for exactly one light, so the
+    other light's resolution/fire path can be observed independently."""
+    if light.name == "Back Yard":
+        raise RuntimeError("boom -- simulated resolution failure")
+    return real_build_fire_command(key, light, segments, now)
+
+
+async def test_force_fire_one_lights_failure_does_not_block_the_others(hass, freezer, caplog):
+    """Regression test for a real gap found during the Phase 5b cancel/
+    Stop bug investigation: async_force_fire's per-light loop had no
+    exception isolation, so a failure resolving ANY one light silently
+    aborted the fire for every other configured light too.
+    """
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = MockConfigEntry(domain=DOMAIN, data=_TWO_LIGHT_ENTRY_DATA, entry_id="test_force_fire_isolation")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+
+    with (
+        patch(
+            "custom_components.chromacal.coordinator.build_fire_command",
+            side_effect=_broken_build_fire_command,
+        ),
+        caplog.at_level(logging.ERROR),
+    ):
+        await coordinator.async_force_fire()
+
+    # Front Porch still got its real fire -- one light's failure didn't
+    # block the other.
+    fired_entities = {call.data["entity_id"] for call in turn_on_calls}
+    assert "light.front_porch" in fired_entities
+    assert "light.back_yard" not in fired_entities
+
+    # And the failure was logged loudly, not silently -- mentions the
+    # specific light that failed.
+    error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert any("light.back_yard" in r.getMessage() for r in error_records)
+    assert any("force-fire failed" in r.getMessage() for r in error_records)
