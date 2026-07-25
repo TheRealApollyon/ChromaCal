@@ -22,6 +22,7 @@ from homeassistant.helpers.event import async_track_time_change, async_track_tim
 
 from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
 from .coordinator import ChromaCalCoordinator
+from .frontend import async_register_frontend, async_unregister_frontend
 
 PLATFORMS: list[str] = ["sensor", "switch", "button"]
 
@@ -84,10 +85,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_register_frontend(hass)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
     """Unload a ChromaCal config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        async_unregister_frontend(hass)
+    return unloaded

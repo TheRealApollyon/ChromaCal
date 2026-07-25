@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .coverage
+
+# Frontend build tooling -- panel_dist/ output IS committed (see
+# frontend/README.md); node_modules and typecheck output are not.
+# package-lock.json IS committed, for reproducible rebuilds.
+frontend/node_modules/
+frontend/dist-typecheck/

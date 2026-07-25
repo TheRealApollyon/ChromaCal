@@ -3,7 +3,7 @@
   "name": "ChromaCal",
   "version": "2.0.0",
   "config_flow": true,
-  "dependencies": ["sun"],
+  "dependencies": ["sun", "http", "frontend"],
   "documentation": "https://github.com/TheRealApollyon/chromacal",
   "issue_tracker": "https://github.com/TheRealApollyon/chromacal/issues",
   "codeowners": ["@TheRealApollyon"],

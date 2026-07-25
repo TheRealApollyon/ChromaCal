@@ -68,6 +68,11 @@ END_TYPES = ["time", "sunrise", "civil_dawn", "never"]
 FADE_IN_OPTIONS = [0, 15, 30, 60, 120]
 FADE_OUT_OPTIONS = [0, 30, 60, 120]
 
+# ── Sidebar panel (Phase 6) ──────────────────────────────────────
+PANEL_URL_PATH = "chromacal"
+PANEL_STATIC_URL_BASE = "/chromacal_static"
+PANEL_WEBCOMPONENT_NAME = "chromacal-panel"
+
 DEFAULT_START_TIME = "19:00"
 DEFAULT_END_TIME = "23:00"
 DEFAULT_FADE_IN = 30

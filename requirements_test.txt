@@ -1,1 +1,5 @@
 pytest-homeassistant-custom-component==0.13.346
+# Pinned to what this HA release's package_constraints.txt requires --
+# the frontend component's own async_setup imports hass_frontend directly,
+# and manifest.json declares "frontend" as a real dependency (Phase 6).
+home-assistant-frontend==20260624.5
