@@ -10,6 +10,8 @@ from scheduling.engine import (
     LightConfig,
     PersonalEvent,
     ScheduleConfig,
+    all_event_names,
+    get_candidates_for_date,
     get_current_segment,
     get_desired_fire_key,
     get_enabled_holidays,
@@ -288,3 +290,47 @@ def test_desired_key_uses_its_own_20h_fallback_when_sunset_is_none():
     now = datetime(2026, 7, 23, 19, 0)
     segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=None)
     assert get_desired_fire_key(now, FIRE_LIGHT, segments, None) == "pre"  # 19:00 < 20.0 fallback
+
+
+# ── get_candidates_for_date / all_event_names ────────────────────────────────
+
+SACRED_EVENT = HolidayEvent(11, 10, 10, "USMC Birthday", "military", "🎂", ("#FF2400",), "sacred")
+VIGIL_EVENT = HolidayEvent(11, 10, 10, "Some Vigil", "military", "🕯️", ("#000000",), "vigil")
+HOLIDAY_EVENT = HolidayEvent(11, 10, 10, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")
+OTHER_DAY_EVENT = HolidayEvent(11, 11, 11, "Veterans Day", "military", "🎖️", ("#000000",), "holiday")
+MULTI_DAY_EVENT = HolidayEvent(11, 1, 30, "Native American Heritage Month", "heritage", "🪶", ("#000000",), "awareness")
+ALL_CANDIDATE_EVENTS = [SACRED_EVENT, VIGIL_EVENT, HOLIDAY_EVENT, OTHER_DAY_EVENT, MULTI_DAY_EVENT]
+
+
+def test_get_candidates_for_date_returns_every_tier_matching_the_date():
+    candidates = get_candidates_for_date(ALL_CANDIDATE_EVENTS, 11, 10)
+    names = {c.name for c in candidates}
+    assert names == {"USMC Birthday", "Some Vigil", "Some Holiday", "Native American Heritage Month"}
+
+
+def test_get_candidates_for_date_excludes_events_on_other_dates():
+    candidates = get_candidates_for_date(ALL_CANDIDATE_EVENTS, 11, 10)
+    assert "Veterans Day" not in {c.name for c in candidates}
+
+
+def test_get_candidates_for_date_includes_multi_day_events_throughout_their_range():
+    # Native American Heritage Month runs Nov 1-30 -- should match on day 1,
+    # mid-range, and day 30, not just its start date.
+    for day in (1, 15, 30):
+        candidates = get_candidates_for_date(ALL_CANDIDATE_EVENTS, 11, day)
+        assert "Native American Heritage Month" in {c.name for c in candidates}
+
+
+def test_get_candidates_for_date_does_not_filter_by_skip_status():
+    # No skip parameter exists on this function at all -- confirmed by
+    # construction (it only takes holidays/month/day), but assert the
+    # actual returned set includes everything regardless of what a caller
+    # might separately consider "skipped".
+    candidates = get_candidates_for_date(ALL_CANDIDATE_EVENTS, 11, 10)
+    assert len(candidates) == 4
+
+
+def test_all_event_names_deduplicates_and_sorts():
+    duplicate = HolidayEvent(1, 1, 1, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")
+    names = all_event_names([SACRED_EVENT, VIGIL_EVENT, HOLIDAY_EVENT, duplicate])
+    assert names == sorted({"USMC Birthday", "Some Vigil", "Some Holiday"})

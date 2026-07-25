@@ -102,6 +102,30 @@ def get_enabled_holidays(config: ScheduleConfig, year: int) -> list[HolidayEvent
     return [apply_color_override(h) for h in merged]
 
 
+def get_candidates_for_date(holidays: list[HolidayEvent], month: int, day: int) -> list[HolidayEvent]:
+    """Every enabled calendar entry whose date range includes month/day,
+    across all tiers, regardless of current skip state or which tier would
+    win a collision.
+
+    Used to determine which events are skippable "tonight" -- deliberately
+    does NOT filter by skip status itself (that's ScheduleConfig's job
+    inside get_night_segments). Filtering it out here too would mean an
+    already-skipped event has no candidate left to build an un-skip switch
+    from, which would violate skip state always being reversible.
+    """
+    return [h for h in holidays if h.month == month and h.day_start <= day <= h.day_end]
+
+
+def all_event_names(holidays: list[HolidayEvent]) -> list[str]:
+    """Every distinct event name in an enabled calendar, sorted.
+
+    Used to build the static, always-present permanent-skip switches --
+    one per name, for the whole enabled region+categories calendar, not
+    scoped to any particular date.
+    """
+    return sorted({h.name for h in holidays})
+
+
 def resolve_tier_winner(
     candidates: list[HolidayEvent], light_name: str, config: ScheduleConfig
 ) -> HolidayEvent | None:
