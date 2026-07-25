@@ -17,7 +17,7 @@ from datetime import timedelta
 
 import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 
 from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
@@ -53,12 +53,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
         async_track_time_interval(hass, _recheck_color_cycle, COLOR_CYCLE_INTERVAL)
     )
 
+    @callback
     def _midnight_rollover(_now) -> None:
         # Exact local-midnight trigger, not a poll: resets tonight-only
         # skips and recomputes which events are skippable "tonight" with
         # near-zero lag, rather than waiting on the 5-minute cycle to
         # notice the date changed (see the Phase 5a plan discussion for
         # why this beat a faster polling interval for this specific job).
+        #
+        # @callback is required, not decorative: without it, HA's job-type
+        # detection (get_hassjob_callable_job_type) treats a plain sync def
+        # as potentially blocking and runs it in the executor thread pool,
+        # not the event loop. ensure_today_candidates() calls
+        # async_update_listeners() internally, which is event-loop-only --
+        # running it from a worker thread raised a real
+        # "calls async_write_ha_state from a thread other than the event
+        # loop" RuntimeError, caught live in the disposable test container
+        # during Phase 5b verification (2026-07-25 05:00:00, a real
+        # midnight rollover, not a hypothetical).
         coordinator.ensure_today_candidates(dt_util.now())
 
     entry.async_on_unload(
