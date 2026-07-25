@@ -9,6 +9,7 @@ override lifecycle, and that the schedule actually resumes afterward.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.helpers import entity_registry as er
@@ -17,6 +18,27 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from custom_components.chromacal.const import DOMAIN
 
 LIGHT_ENTITY = "light.front_porch"
+
+# Captured before any patching -- patching
+# "custom_components.chromacal.coordinator.asyncio.sleep" patches the
+# shared asyncio module's `sleep` attribute itself, so a replacement that
+# calls asyncio.sleep would recurse into itself. This alias sidesteps
+# that (same reasoning as test_override_precedence.py).
+_real_sleep = asyncio.sleep
+
+
+async def _yield_to_event_loop(times: int = 20) -> None:
+    """Let a concurrently-running task (a just-started Salute) advance
+    for a bit before the test proceeds -- delay=0, not a real duration,
+    because freezegun's `freezer` fixture defaults real_asyncio=False,
+    which freezes the event loop's own monotonic clock along with wall-
+    clock time; any asyncio.sleep(n>0) would schedule a callback that
+    never fires. sleep(0) is a genuinely different, clock-free code path
+    (confirmed in asyncio's own source) -- see
+    test_override_precedence.py for the full explanation of this gotcha.
+    """
+    for _ in range(times):
+        await _real_sleep(0)
 
 ENTRY_DATA = {
     "region": "us",
@@ -162,3 +184,57 @@ async def test_toggle_salute_button_press_delegates_to_the_coordinator(hass, fre
         await hass.async_block_till_done()
 
     mock_toggle.assert_called_once()
+
+
+async def test_toggle_salute_second_call_fires_a_new_resume_command_with_correct_color(
+    hass, freezer
+):
+    """The specific gap a real manual-testing bug report exposed: every
+    existing cancellation test checked that the sequence *stopped* (state
+    flags reset, override cleared) but none checked that a NEW
+    light.turn_on with the correct resolved-schedule color actually fired
+    afterward -- through async_toggle_salute()'s own cancel branch
+    specifically (the path a real button's second press takes), not just
+    through async_cancel_salute() called some other way.
+
+    Traced against the real code and confirmed live in the disposable
+    container (recorder DB cross-checked) that this already works
+    correctly given an active-window time -- this test is the coverage
+    that should have existed already, not a fix for a bug that turned out
+    not to exist in the traced code path itself.
+    """
+    freezer.move_to("2026-07-04 21:00:00-05:00")  # inside Independence Day's active window
+    await hass.config.async_set_time_zone("America/Chicago")
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+    async_mock_service(hass, "light", "turn_off")
+
+    entry = await _setup_entry(hass, "test_toggle_salute_resume_color")
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+    await coordinator.async_refresh()  # establishes event:Independence Day, seeds the gate
+    await hass.async_block_till_done()
+    calls_before = len(turn_on_calls)
+
+    async def _real_short_sleep(_seconds: float) -> None:
+        await _real_sleep(0)
+
+    with patch("custom_components.chromacal.coordinator.asyncio.sleep", new=_real_short_sleep):
+        await coordinator.async_toggle_salute("standard")  # press 1: starts it
+        assert coordinator.salute_active is True
+        await _yield_to_event_loop()  # let it get partway through the sequence
+
+        await coordinator.async_toggle_salute("standard")  # press 2: cancels it
+
+    assert coordinator.salute_active is False
+
+    # The actual gap: not just "did it stop" -- did a NEW, correctly
+    # resolved-schedule command fire afterward, not just the Salute's own
+    # in-sequence colors (white flash / red afterglow)?
+    assert len(turn_on_calls) > calls_before
+    resume_call = turn_on_calls[-1]
+    assert resume_call.data["rgb_color"] == [220, 20, 60]  # Independence Day, index 0
+    assert resume_call.data["entity_id"] == LIGHT_ENTITY
