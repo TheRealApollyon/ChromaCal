@@ -15,6 +15,15 @@ faster ~60s interval -- see async_recheck_color_cycle() and __init__.py's
 registration of it -- since it's designed to advance roughly once a minute
 and this coordinator's own 5-minute cadence would only sample a fraction
 of the cycle, not restore it.
+
+The skip system (Phase 5a) splits similarly by cadence: permanent skip
+(self.skipped_events) is a standing setting persisted to the config entry's
+options, checked on every refresh like region/categories. Skip-tonight
+(self.tonight_skips) resets at exactly local midnight via
+ensure_today_candidates(), driven by __init__.py's async_track_time_change
+callback rather than this coordinator's own 5-minute cycle -- see the Phase
+5a plan discussion for why a scheduled exact-time callback beats polling
+for a reset that has one precisely-known trigger instant per day.
 """
 
 from __future__ import annotations
@@ -25,14 +34,17 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 import homeassistant.util.dt as dt_util
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CONF_ENTITY, DOMAIN
+from .const import CONF_ENTITY, CONF_SKIPPED_EVENTS, DOMAIN
 from .scheduling.bridge import build_light_config, build_schedule_config
 from .scheduling.engine import (
     LightConfig,
+    all_event_names,
+    get_candidates_for_date,
     get_current_segment,
     get_desired_fire_key,
     get_enabled_holidays,
@@ -68,11 +80,13 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
     def __init__(
         self,
         hass: HomeAssistant,
+        entry: ConfigEntry,
         region: str,
         categories: dict[str, bool],
         lights: list[dict[str, Any]],
     ) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=UPDATE_INTERVAL)
+        self._entry = entry
         self.region = region
         self.categories = categories
         self.lights = lights
@@ -95,6 +109,31 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # .get(), never [] -- "not yet seeded" (a light's first-ever fire) is
         # a real, expected state, not a bug.
         self._last_fired_rgb_color: dict[str, list[int]] = {}
+        # Permanent skip: matches v1's CFG.skippedEvents (global, per-event
+        # name, not per-light). Seeded from config entry OPTIONS (not the
+        # switch entity's own RestoreEntity storage) because these switches
+        # are static -- see the Phase 5a plan discussion for why options is
+        # still the right home even though nothing here gets recreated.
+        self.skipped_events: set[str] = set(entry.options.get(CONF_SKIPPED_EVENTS, []))
+        # Skip-tonight: matches v1's CFG.tonightSkips, but flattened to a
+        # single in-memory set + a date guard (the coordinator only ever
+        # cares about *today's* key) rather than v1's date-keyed dict of
+        # every day that ever had a skip. Deliberately NOT persisted to
+        # config entry options like skipped_events above -- if HA restarts
+        # while a tonight-skip is active, it resets and the suppressed event
+        # resumes. Accepted as-designed: HA restarts are rare and deliberate
+        # (an update, a reboot), unlike v1's browser tab, which reloaded
+        # constantly just from normal use -- the persistence v1 needed to
+        # survive *that* churn doesn't apply here. Reset precisely at local
+        # midnight via ensure_today_candidates(), not just whenever the
+        # 5-minute cycle happens to notice (see __init__.py's
+        # async_track_time_change registration).
+        self.tonight_skips: set[str] = set()
+        self.tonight_skips_date: date | None = None
+        # Which event names are skippable *tonight* -- drives the dynamic
+        # tonight-skip switches (see switch.py). Recomputed alongside the
+        # tonight_skips reset above, same date guard.
+        self.todays_candidate_names: set[str] = set()
 
     def _resolve_sunset(self) -> float | None:
         """Return today's sunset as a decimal hour, cached once per day.
@@ -129,11 +168,81 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         self.sunset_date = today
         return sunset_hour
 
+    def ensure_today_candidates(self, now: datetime) -> None:
+        """Reset tonight_skips and recompute today's skippable candidates
+        if the date has changed.
+
+        Called from two places: __init__.py's async_track_time_change
+        callback, pinned to exactly local midnight -- the precise,
+        near-zero-lag path this exists for -- and defensively from
+        _async_update_data()'s own 5-minute cycle, which only matters
+        right after HA startup (before that callback has had a chance to
+        fire) or if a callback were somehow missed. The date guard makes
+        calling this from both places safe and cheap: the second call on
+        any given day is just an equality check.
+        """
+        today = now.date()
+        if self.tonight_skips_date == today:
+            return
+        self.tonight_skips = set()
+        self.tonight_skips_date = today
+        config = build_schedule_config(
+            self.region, self.categories, skipped_events=frozenset(self.skipped_events)
+        )
+        holidays = get_enabled_holidays(config, now.year)
+        candidates = get_candidates_for_date(holidays, now.month, now.day)
+        self.todays_candidate_names = {c.name for c in candidates}
+        self.async_update_listeners()  # lets switch.py add/remove tonight-skip entities
+
+    def get_all_event_names(self) -> list[str]:
+        """Every event name in the enabled region+categories calendar --
+        drives the static, always-present permanent-skip switches."""
+        config = build_schedule_config(self.region, self.categories)
+        holidays = get_enabled_holidays(config, dt_util.now().year)
+        return all_event_names(holidays)
+
+    async def async_set_permanent_skip(self, event_name: str, skipped: bool) -> None:
+        """Skip (or restore) an event permanently. Always reversible --
+        this is the same set either direction, per CLAUDE.md's hard rule;
+        there is no separate one-way "permanent" code path.
+        """
+        if skipped:
+            self.skipped_events.add(event_name)
+        else:
+            self.skipped_events.discard(event_name)
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_SKIPPED_EVENTS: sorted(self.skipped_events)},
+        )
+        # async_refresh(), not async_request_refresh() -- the latter is
+        # debounced (meant for coalescing rapid automatic triggers), which
+        # left the switch's own reported state stale immediately after a
+        # toggle in testing. A direct user action should update
+        # deterministically and immediately, not wait out a debounce window.
+        await self.async_refresh()
+
+    async def async_set_tonight_skip(self, event_name: str, skipped: bool) -> None:
+        """Skip (or restore) an event for tonight only. In-memory only --
+        see tonight_skips' field docstring for why, and
+        ensure_today_candidates() for how/when it resets.
+        """
+        if skipped:
+            self.tonight_skips.add(event_name)
+        else:
+            self.tonight_skips.discard(event_name)
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
     async def _async_update_data(self) -> dict[str, LightSchedule]:
         now = dt_util.now()
         now_hour = now.hour + now.minute / 60
+        self.ensure_today_candidates(now)
         sunset_hour = self._resolve_sunset()
-        config = build_schedule_config(self.region, self.categories)
+        config = build_schedule_config(
+            self.region,
+            self.categories,
+            skipped_events=frozenset(self.skipped_events),
+            tonight_skips=frozenset(self.tonight_skips),
+        )
         holidays = get_enabled_holidays(config, now.year)
 
         result: dict[str, LightSchedule] = {}

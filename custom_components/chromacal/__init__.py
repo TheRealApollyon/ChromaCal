@@ -18,12 +18,12 @@ from datetime import timedelta
 import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 
 from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
 from .coordinator import ChromaCalCoordinator
 
-PLATFORMS: list[str] = ["sensor"]
+PLATFORMS: list[str] = ["sensor", "switch"]
 
 # v1's real cadence for multi-color cycling, inherited from the Blueprint
 # automation it relied on (see coordinator.py's async_recheck_color_cycle).
@@ -37,6 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
     """Set up ChromaCal from a config entry."""
     coordinator = ChromaCalCoordinator(
         hass,
+        entry,
         region=entry.data[CONF_REGION],
         categories=entry.data[CONF_CATEGORIES],
         lights=entry.data[CONF_LIGHTS],
@@ -50,6 +51,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
 
     entry.async_on_unload(
         async_track_time_interval(hass, _recheck_color_cycle, COLOR_CYCLE_INTERVAL)
+    )
+
+    def _midnight_rollover(_now) -> None:
+        # Exact local-midnight trigger, not a poll: resets tonight-only
+        # skips and recomputes which events are skippable "tonight" with
+        # near-zero lag, rather than waiting on the 5-minute cycle to
+        # notice the date changed (see the Phase 5a plan discussion for
+        # why this beat a faster polling interval for this specific job).
+        coordinator.ensure_today_candidates(dt_util.now())
+
+    entry.async_on_unload(
+        async_track_time_change(hass, _midnight_rollover, hour=0, minute=0, second=0)
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

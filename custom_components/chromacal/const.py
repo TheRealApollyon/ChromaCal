@@ -7,6 +7,13 @@ CONF_REGION = "region"
 CONF_CATEGORIES = "categories"
 CONF_LIGHTS = "lights"
 
+# ── Config entry OPTIONS keys — mutable post-setup settings, not part of
+# the original wizard (unlike CONF_REGION/CONF_CATEGORIES/CONF_LIGHTS
+# above). Permanent-skip state lives here (see coordinator.py) so it
+# survives restarts independently of any particular switch entity's
+# lifecycle.
+CONF_SKIPPED_EVENTS = "skipped_events"
+
 # ── Per-light config keys (mirrors the v1 saveLight() object shape) ─
 CONF_NAME = "name"
 CONF_ZONE = "zone"
