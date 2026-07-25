@@ -320,3 +320,73 @@ async def test_stop_button_entity_delegates_to_the_coordinator(hass, freezer):
         await hass.async_block_till_done()
 
     mock_stop.assert_called_once()
+
+
+# ── Entity state vs. physical light during 'pre'/'warmup' ───────────
+#
+# Deliberate decision, not a bug: cancelling during 'pre'/'warmup' leaves
+# the physical light on the override's last state, since 'pre' means "do
+# nothing, an existing automation handles this phase" -- see ROADMAP.md.
+# What actually matters is that the *entity* state (the button's `running`
+# attribute, the switch's `is_on`) still flips to stopped/off correctly
+# and immediately, regardless of whether the resume produces a visible
+# light change. These tests prove that specifically, at a frozen 'pre'
+# time (noon), where async_force_fire's resume is a guaranteed no-op.
+
+
+async def test_salute_button_running_flips_false_even_when_resume_is_a_noop(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")  # noon -- guaranteed 'pre'
+    await hass.config.async_set_time_zone("America/Chicago")
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+    turn_off_calls = async_mock_service(hass, "light", "turn_off")
+
+    entry = await _setup_entry(hass, "test_salute_running_flips_during_pre")
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("button", DOMAIN, f"{entry.entry_id}_salute")
+
+    with patch("custom_components.chromacal.coordinator.asyncio.sleep", new=_real_short_sleep):
+        await coordinator.async_toggle_salute("standard")
+        assert coordinator.salute_active is True
+        assert hass.states.get(entity_id).attributes["running"] is True
+        await _yield_to_event_loop()
+
+        # The Salute's own in-sequence colors DID fire (it bypasses 'pre'
+        # gating by design) -- confirms this isn't a no-op test by accident.
+        calls_during_sequence = len(turn_on_calls) + len(turn_off_calls)
+        assert calls_during_sequence > 0
+
+        await coordinator.async_toggle_salute("standard")  # cancel
+
+    # Entity state flipped correctly...
+    assert coordinator.salute_active is False
+    assert hass.states.get(entity_id).attributes["running"] is False
+    # ...even though the resume itself was a guaranteed no-op: no NEW
+    # light call beyond what the Salute sequence itself already fired.
+    assert len(turn_on_calls) + len(turn_off_calls) == calls_during_sequence
+
+
+async def test_emergency_switch_is_on_flips_false_even_when_resume_is_a_noop(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")  # noon -- guaranteed 'pre'
+    await hass.config.async_set_time_zone("America/Chicago")
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = await _setup_entry(hass, "test_emergency_off_flips_during_pre")
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+    calls_during_emergency = len(turn_on_calls)
+    assert calls_during_emergency > 0  # Emergency's own colors fired, bypassing 'pre' too
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    # Entity state flipped correctly...
+    assert coordinator.emergency_active is False
+    assert hass.states.get(entity_id).state == "off"
+    # ...even though the resume itself was a guaranteed no-op.
+    assert len(turn_on_calls) == calls_during_emergency

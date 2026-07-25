@@ -88,6 +88,18 @@ Right direction: keep full automatic as the untouched default. Add an optional m
 
 ---
 
+## Light state can lag entity state during the day — deliberate, not a bug
+
+Came up during the Salute cancel/Stop work in Phase 5b, worth recording precisely so it doesn't get rediscovered as a mystery bug report later. Cancelling a Salute, stopping Emergency Mode, or hitting the global Stop button all correctly resume "the real schedule" immediately — but during `'pre'`/`'warmup'` (before a light's configured active window starts for the night, i.e. daytime), the real schedule's own answer is "do nothing, an existing sunrise/sunset automation is assumed to handle this phase." That's the documented contract `get_desired_fire_key` has had since Phase 4, not something new. The consequence: cancelling an override during the day leaves the physical light sitting on whatever color the override last set, since there's genuinely nothing else for ChromaCal to tell it during that phase.
+
+This looked like a real bug the first time it got manually tested, precisely because it was tested during the day. Traced and confirmed live (real container, recorder DB cross-checked) that the actual mechanism is correct: entity state (the Salute button's `running` attribute, the Emergency switch's `is_on`) always flips to stopped/off immediately and correctly, completely decoupled from whether the resume produces a visible light change — proven with a dedicated test pinned to a frozen daytime `'pre'` moment specifically, not just inferred from reading the code.
+
+Two ways to make the physical light match too were considered and deliberately not taken: explicitly turning the light off on a `'pre'`/`'warmup'` resume, or snapshotting the light's state when an override starts and restoring that snapshot instead. Both were rejected for the same reason — they'd have ChromaCal actively asserting control over the light during the one phase it explicitly disclaims control over, which risks fighting a real, unrelated daytime automation on the same light (a snapshot-restore has the added problem of being stale if that other automation changed the light again after the snapshot was taken, fighting it in the *other* direction). Leaving the light alone during `'pre'`/`'warmup'` is the behavior that actually matches the contract, not a gap in it.
+
+Holding here. If real usage ever surfaces this as a genuine practical problem — not a hypothetical — revisit with that evidence in hand, the same way the Pagan/Wiccan calendar work above started from an actual request rather than a guess at what might matter.
+
+---
+
 **Phase 1, skeleton.** Minimal `custom_components/chromacal/` that HACS can install and HA can load: `manifest.json`, `__init__.py`, `config_flow.py` with a basic Add Integration wizard, one placeholder sensor entity. No scheduling logic yet. Goal is purely proving the packaging and loading mechanics work end to end before porting anything real into it.
 
 **Phase 2, port the brain.** Move the holiday calendar (Easter, Islamic estimates, nth-weekday US holidays, the rest), split-night logic, and color style transforms from JavaScript into Python. Wire it to a `DataUpdateCoordinator` that recomputes the current phase on an interval and fires `light.turn_on`/`light.turn_off` directly, no REST, no token.
