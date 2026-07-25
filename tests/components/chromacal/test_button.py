@@ -59,6 +59,30 @@ async def test_salute_catchup_stop_and_force_white_buttons_are_created(hass, fre
     assert _button_id(registry, entry.entry_id, f"_{LIGHT_ENTITY}_force_white") is not None
 
 
+async def test_global_and_force_white_buttons_expose_role_for_frontend_grouping(hass, freezer):
+    """Regression coverage for the Phase 6 panel work: the frontend tells
+    the three global buttons apart, and identifies a Force White button's
+    light, from these attributes instead of parsing display names."""
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_button_role_attrs")
+    registry = er.async_get(hass)
+
+    salute_id = _button_id(registry, entry.entry_id, "_salute")
+    assert hass.states.get(salute_id).attributes["role"] == "salute"
+
+    catch_up_id = _button_id(registry, entry.entry_id, "_catch_up_sync")
+    assert hass.states.get(catch_up_id).attributes["role"] == "catch_up_sync"
+
+    stop_id = _button_id(registry, entry.entry_id, "_stop")
+    assert hass.states.get(stop_id).attributes["role"] == "stop"
+
+    force_white_id = _button_id(registry, entry.entry_id, f"_{LIGHT_ENTITY}_force_white")
+    force_white_attrs = hass.states.get(force_white_id).attributes
+    assert force_white_attrs["role"] == "force_white"
+    assert force_white_attrs["light_entity"] == LIGHT_ENTITY
+
+
 # ── Catch Up / Sync ─────────────────────────────────────────────────
 
 

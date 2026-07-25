@@ -90,7 +90,10 @@ class ChromaCalSaluteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"running": self.coordinator.salute_active}
+        # role lets the frontend panel identify this specific global button
+        # by data instead of parsing its display name -- same reasoning as
+        # the switch.py role/scope attributes.
+        return {"role": "salute", "running": self.coordinator.salute_active}
 
     async def async_press(self) -> None:
         # Not fire-and-forget at this layer: async_toggle_salute() itself
@@ -112,6 +115,10 @@ class ChromaCalCatchUpButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEnti
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry_id}_catch_up_sync"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"role": "catch_up_sync"}
 
     async def async_press(self) -> None:
         self.coordinator.async_fire_and_forget(
@@ -141,6 +148,10 @@ class ChromaCalStopButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity)
         self._attr_unique_id = f"{entry_id}_stop"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"role": "stop"}
+
     async def async_press(self) -> None:
         await self.coordinator.async_stop_all_overrides()
 
@@ -162,6 +173,10 @@ class ChromaCalForceWhiteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonE
         self._attr_name = f"{light_name} Force White"
         self._attr_unique_id = f"{entry_id}_{light_entity}_force_white"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"role": "force_white", "light_entity": self._light_entity}
 
     async def async_press(self) -> None:
         # Fast/single service call, but fire-and-forget for the same

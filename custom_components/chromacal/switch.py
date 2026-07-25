@@ -128,6 +128,13 @@ class ChromaCalPermanentSkipSwitch(CoordinatorEntity[ChromaCalCoordinator], Swit
     def is_on(self) -> bool:
         return self._event_name in self.coordinator.skipped_events
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        # role/scope let the frontend panel group and identify switches by
+        # data instead of parsing display names (which a user could rename)
+        # -- same reasoning as sensor.py's existing attributes.
+        return {"role": "skip", "scope": "permanent", "event_name": self._event_name}
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_permanent_skip(self._event_name, True)
 
@@ -157,6 +164,10 @@ class ChromaCalTonightSkipSwitch(CoordinatorEntity[ChromaCalCoordinator], Switch
     def is_on(self) -> bool:
         return self._event_name in self.coordinator.tonight_skips
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"role": "skip", "scope": "tonight", "event_name": self._event_name}
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_tonight_skip(self._event_name, True)
 
@@ -182,6 +193,10 @@ class ChromaCalEmergencySwitch(CoordinatorEntity[ChromaCalCoordinator], SwitchEn
     @property
     def is_on(self) -> bool:
         return self.coordinator.emergency_active
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"role": "emergency_mode"}
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         # Fast to complete (fires once, registers a repeating interval, and

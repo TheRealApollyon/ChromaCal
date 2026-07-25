@@ -120,6 +120,22 @@ async def test_permanent_skip_persists_to_config_entry_options(hass, freezer):
     assert entry.options.get("skipped_events") == ["Independence Day"]
 
 
+async def test_permanent_skip_switch_exposes_role_scope_and_event_name(hass, freezer):
+    """Regression coverage for the Phase 6 panel work: the frontend groups
+    switches by these attributes instead of parsing display names (which a
+    user could rename in the UI)."""
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_permanent_attrs")
+
+    registry = er.async_get(hass)
+    entity_id = _permanent_id(registry, entry.entry_id, "Independence Day")
+    attrs = hass.states.get(entity_id).attributes
+    assert attrs["role"] == "skip"
+    assert attrs["scope"] == "permanent"
+    assert attrs["event_name"] == "Independence Day"
+
+
 async def test_tonight_skip_switch_only_exists_for_todays_candidates(hass, freezer):
     freezer.move_to("2026-07-04 12:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
@@ -128,6 +144,19 @@ async def test_tonight_skip_switch_only_exists_for_todays_candidates(hass, freez
     registry = er.async_get(hass)
     assert _tonight_id(registry, entry.entry_id, "Independence Day") is not None
     assert _tonight_id(registry, entry.entry_id, "Veterans Day") is None  # a different date
+
+
+async def test_tonight_skip_switch_exposes_role_scope_and_event_name(hass, freezer):
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_tonight_attrs")
+
+    registry = er.async_get(hass)
+    entity_id = _tonight_id(registry, entry.entry_id, "Independence Day")
+    attrs = hass.states.get(entity_id).attributes
+    assert attrs["role"] == "skip"
+    assert attrs["scope"] == "tonight"
+    assert attrs["event_name"] == "Independence Day"
 
 
 async def test_toggling_tonight_skip_suppresses_only_tonight_not_permanently(hass, freezer):
@@ -203,6 +232,16 @@ async def test_emergency_switch_is_off_by_default(hass, freezer):
     entity_id = _emergency_id(registry, entry.entry_id)
     assert entity_id is not None
     assert hass.states.get(entity_id).state == "off"
+
+
+async def test_emergency_switch_exposes_role(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_emergency_role_attr")
+
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+    assert hass.states.get(entity_id).attributes["role"] == "emergency_mode"
 
 
 async def test_turning_on_emergency_fires_immediately_and_reports_on(hass, freezer):
