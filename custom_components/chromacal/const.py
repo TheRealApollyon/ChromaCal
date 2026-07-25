@@ -14,6 +14,15 @@ CONF_LIGHTS = "lights"
 # lifecycle.
 CONF_SKIPPED_EVENTS = "skipped_events"
 
+# One-shot breadcrumb, not live state: True the instant Emergency Mode
+# starts, False the instant it stops cleanly. If the coordinator finds this
+# True on startup, HA went down mid-broadcast without ever reaching the
+# normal stop path -- see coordinator.py's startup check, which logs a
+# warning, fires a persistent_notification, and immediately clears this
+# back to False. Emergency Mode's actual runtime state is never restored
+# from this -- it stays fresh/in-memory, same reasoning as tonight_skips.
+CONF_EMERGENCY_WAS_ACTIVE = "emergency_was_active"
+
 # ── Per-light config keys (mirrors the v1 saveLight() object shape) ─
 CONF_NAME = "name"
 CONF_ZONE = "zone"

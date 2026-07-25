@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import homeassistant.util.dt as dt_util
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
-from custom_components.chromacal.const import DOMAIN
+from custom_components.chromacal.const import CONF_EMERGENCY_WAS_ACTIVE, DOMAIN
 
 LIGHT_ENTITY = "light.front_porch"
 
@@ -185,3 +185,114 @@ async def test_ensure_today_candidates_adds_and_removes_tonight_switches_across_
 
     assert _tonight_id(registry, entry.entry_id, "Independence Day") is None
     assert hass.states.get(july4_entity) is None
+
+
+# ── Emergency Mode ───────────────────────────────────────────────────
+
+
+def _emergency_id(registry, entry_id: str) -> str | None:
+    return registry.async_get_entity_id("switch", DOMAIN, f"{entry_id}_emergency_mode")
+
+
+async def test_emergency_switch_is_off_by_default(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_emergency_off_default")
+
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+    assert entity_id is not None
+    assert hass.states.get(entity_id).state == "off"
+
+
+async def test_turning_on_emergency_fires_immediately_and_reports_on(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = await _setup_entry(hass, "test_emergency_turn_on")
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == "on"
+    assert entry.runtime_data.emergency_active is True
+    assert len(turn_on_calls) == 1  # fired immediately on activation, matching v1
+    assert turn_on_calls[0].data["rgb_color"] == [255, 0, 0]  # red-blue pattern, first color
+
+    # Clean up the running interval before the test ends.
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+
+async def test_turning_off_emergency_stops_and_resumes_the_schedule(hass, freezer):
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+
+    entry = await _setup_entry(hass, "test_emergency_turn_off")
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+    await coordinator.async_refresh()  # establishes event:Independence Day
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == "off"
+    assert coordinator.emergency_active is False
+    assert LIGHT_ENTITY not in coordinator._manual_override
+    # Last call resumes the real schedule -- back to Independence Day, not
+    # left on whatever emergency color happened to fire last.
+    assert turn_on_calls[-1].data["rgb_color"] == [220, 20, 60]
+
+
+async def test_emergency_suppresses_autofire_while_active(hass, freezer):
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    hass.states.async_set(
+        "sun.sun", "below_horizon", {"next_setting": "2026-07-06T01:00:00+00:00"}
+    )
+    entry = await _setup_entry(hass, "test_emergency_override")
+    coordinator = entry.runtime_data
+    coordinator.sunset_hour = None
+    coordinator.sunset_date = None
+    await coordinator.async_refresh()
+
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert coordinator._is_overridden(LIGHT_ENTITY) is True
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert coordinator._is_overridden(LIGHT_ENTITY) is False
+
+
+async def test_emergency_breadcrumb_flag_tracks_start_and_clean_stop(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_emergency_breadcrumb")
+    registry = er.async_get(hass)
+    entity_id = _emergency_id(registry, entry.entry_id)
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert entry.options.get(CONF_EMERGENCY_WAS_ACTIVE) is True
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done()
+    assert entry.options.get(CONF_EMERGENCY_WAS_ACTIVE) is False

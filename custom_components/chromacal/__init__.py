@@ -23,7 +23,7 @@ from homeassistant.helpers.event import async_track_time_change, async_track_tim
 from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
 from .coordinator import ChromaCalCoordinator
 
-PLATFORMS: list[str] = ["sensor", "switch"]
+PLATFORMS: list[str] = ["sensor", "switch", "button"]
 
 # v1's real cadence for multi-color cycling, inherited from the Blueprint
 # automation it relied on (see coordinator.py's async_recheck_color_cycle).
@@ -45,6 +45,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+
+    # One-shot check: did HA go down while Emergency Mode was actively
+    # broadcasting? Logs + raises a persistent_notification if so, then
+    # clears the breadcrumb. Emergency Mode's own runtime state is never
+    # resumed by this -- see coordinator.py's async_check_emergency_breadcrumb().
+    await coordinator.async_check_emergency_breadcrumb()
 
     async def _recheck_color_cycle(_now) -> None:
         await coordinator.async_recheck_color_cycle(dt_util.now())

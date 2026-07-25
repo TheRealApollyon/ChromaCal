@@ -1,7 +1,7 @@
-"""Switch platform for ChromaCal: the skip system.
+"""Switch platform for ChromaCal: the skip system, plus Emergency Mode.
 
-Two switch types, deliberately scoped and persisted differently -- see the
-Phase 5a plan discussion for the full reasoning:
+Skip system -- two switch types, deliberately scoped and persisted
+differently -- see the Phase 5a plan discussion for the full reasoning:
 
 - Permanent skip: one switch per event in the whole enabled region+
   categories calendar, created once (static, like the sensor platform).
@@ -13,8 +13,18 @@ Phase 5a plan discussion for the full reasoning:
   ensure_today_candidates()), which is why this is the first entity type
   in this integration that isn't created once and left alone.
 
-Both are always reversible by construction (CLAUDE.md's hard rule) -- a
-switch has both an on and off state, there's no separate one-way action.
+Emergency Mode (Phase 5b) is here too, not in button.py, despite CLAUDE.md
+listing it alongside the other quick-control buttons -- it's genuinely
+start/stop with a real running state (an alternating color broadcast that
+continues until explicitly cancelled), not a fire-once trigger. A button
+entity has no persisted on/off state to show "is this currently active"
+without bolting on a separate sensor; a switch's is_on gives that for
+free. Same reasoning that made the skip system a switch in the first
+place.
+
+All switches here are always reversible by construction (CLAUDE.md's hard
+rule) -- a switch has both an on and off state, there's no separate
+one-way action.
 """
 
 from __future__ import annotations
@@ -58,6 +68,7 @@ async def async_setup_entry(
         ChromaCalPermanentSkipSwitch(coordinator, entry.entry_id, name)
         for name in coordinator.get_all_event_names()
     )
+    async_add_entities([ChromaCalEmergencySwitch(coordinator, entry.entry_id)])
 
     # Reconcile against whatever the entity registry already has for THIS
     # entry, not an empty set -- otherwise a tonight-skip switch that was
@@ -151,3 +162,32 @@ class ChromaCalTonightSkipSwitch(CoordinatorEntity[ChromaCalCoordinator], Switch
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_tonight_skip(self._event_name, False)
+
+
+class ChromaCalEmergencySwitch(CoordinatorEntity[ChromaCalCoordinator], SwitchEntity):
+    """Broadcast an alternating emergency color pattern across every
+    configured light until turned back off. See this module's docstring
+    for why this is a switch, not a button.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Emergency Mode"
+    _attr_icon = "mdi:alert-octagon"
+
+    def __init__(self, coordinator: ChromaCalCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_emergency_mode"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.emergency_active
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        # Fast to complete (fires once, registers a repeating interval, and
+        # returns) unlike Salute, so a direct await is fine here -- no need
+        # for the fire-and-forget task pattern button.py uses.
+        await self.coordinator.async_start_emergency()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.coordinator.async_stop_emergency()

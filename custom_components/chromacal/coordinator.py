@@ -5,10 +5,24 @@ minutes -- frequent enough that the "currently active segment" tracks
 reality across an awareness-split night, infrequent enough to be obviously
 not wasteful for data that changes at most a few times a night. Chosen over
 bare polling specifically because CLAUDE.md's entity list already commits
-to a Catch Up/Sync button (Phase 5+) whose entire job is
-`coordinator.async_request_refresh()` -- building the coordinator now means
-that button, and any switch/button entities that share this same resolved
-schedule, are nearly free later instead of requiring a refactor then.
+to switch/button entities that share this same resolved schedule, which
+are nearly free to add on top of a coordinator instead of requiring a
+refactor later.
+
+Quick-control actions (Phase 5b): 21 Gun Salute, Force White, Emergency
+Mode, and Catch Up/Sync all needed a shared primitive this module didn't
+have yet -- async_force_fire() recomputes and unconditionally re-issues
+the current desired command, bypassing the _last_fire_key/
+_last_fired_rgb_color gate that _auto_fire normally uses to avoid
+redundant firing. (Catch Up/Sync is NOT just coordinator.async_refresh()
+-- that was this docstring's original assumption, checked and found wrong
+during the Phase 5b plan: refresh() recomputes self.data for the sensors
+but leaves the fire gate untouched, so a light that's drifted out of sync
+with what the coordinator last told it wouldn't get re-fired at all.)
+Salute, Force White, and Emergency Mode also needed something v1 had and
+this coordinator didn't: _manual_override, a per-light suppression map so
+auto-fire (and the color-cycle recheck) stand down while one of these is
+active, ported from v1's _schedOverride.
 
 Multi-color event cycling (the gap flagged in Phase 4) runs on a separate,
 faster ~60s interval -- see async_recheck_color_cycle() and __init__.py's
@@ -28,18 +42,28 @@ for a reset that has one precisely-known trigger instant per day.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Callable, Coroutine, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
 import homeassistant.util.dt as dt_util
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CONF_ENTITY, CONF_SKIPPED_EVENTS, DOMAIN
+from .const import CONF_EMERGENCY_WAS_ACTIVE, CONF_ENTITY, CONF_SKIPPED_EVENTS, DOMAIN
+from .scheduling.actions import (
+    EMERGENCY_TRANSITION,
+    build_force_white_command,
+    get_emergency_sequence,
+    get_salute_steps,
+)
 from .scheduling.bridge import build_light_config, build_schedule_config
 from .scheduling.engine import (
     LightConfig,
@@ -61,6 +85,8 @@ _NO_FIRE_KEYS = ("pre", "warmup")
 _LOGGER = logging.getLogger(__name__)
 
 UPDATE_INTERVAL = timedelta(minutes=5)
+FORCE_WHITE_OVERRIDE_MINUTES = 30  # matches v1's OVERRIDE_MINS -- real-world tuned, not arbitrary
+EMERGENCY_FIRE_INTERVAL = timedelta(seconds=5)  # matches v1's default CFG.emergencyInterval
 
 
 @dataclass
@@ -134,6 +160,31 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # tonight-skip switches (see switch.py). Recomputed alongside the
         # tonight_skips reset above, same date guard.
         self.todays_candidate_names: set[str] = set()
+        # Manual override: suppresses auto-fire and the color-cycle recheck
+        # for a light, ported from v1's _schedOverride. Value is the local
+        # expiry datetime (Force White's bounded 30-minute window) or None
+        # for "suppressed indefinitely until explicitly cleared" (Salute in
+        # progress, Emergency Mode active). In-memory only, like
+        # tonight_skips above -- losing an active override on an HA restart
+        # is an accepted tradeoff for Force White and Salute (same
+        # reasoning as tonight_skips: restarts are rare/deliberate). NOT
+        # accepted as-is for Emergency Mode specifically -- silently losing
+        # an active safety broadcast is a worse failure than a decorative
+        # override resetting early, so that one gets its own narrow
+        # persisted breadcrumb (CONF_EMERGENCY_WAS_ACTIVE) purely to warn a
+        # human it happened, not to resume the broadcast -- see
+        # async_check_emergency_breadcrumb().
+        self._manual_override: dict[str, datetime | None] = {}
+        # Re-entry guard for the Salute sequence -- checked and set
+        # synchronously, before any await, so two rapid button presses
+        # can't both pass the guard. Same atomicity discipline as the
+        # Phase 4c auto-fire race-condition fix.
+        self.salute_active: bool = False
+        # Emergency Mode's live state. Always starts fresh/False on a new
+        # coordinator -- never restored from CONF_EMERGENCY_WAS_ACTIVE,
+        # which is a one-shot breadcrumb, not resumable state.
+        self.emergency_active: bool = False
+        self._emergency_unsub: Callable[[], None] | None = None
 
     def _resolve_sunset(self) -> float | None:
         """Return today's sunset as a decimal hour, cached once per day.
@@ -232,6 +283,30 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             self.tonight_skips.discard(event_name)
         await self.async_refresh()  # same reasoning as async_set_permanent_skip above
 
+    def _is_overridden(self, light_entity: str) -> bool:
+        """True if auto-fire and color-cycling should stand down for this
+        light right now. Ported from v1's isOverridden gate. Absent from
+        _manual_override means no override. An entry of None means
+        suppressed indefinitely (Salute in progress, Emergency Mode
+        active) until whoever set it explicitly clears it. A real datetime
+        means suppressed until that time (Force White's bounded window);
+        self-clearing past that point is the caller's job via
+        async_call_later, not this method's.
+        """
+        if light_entity not in self._manual_override:
+            return False
+        expiry = self._manual_override[light_entity]
+        return expiry is None or dt_util.now() < expiry
+
+    def _light_config_for(self, light_entity: str) -> LightConfig | None:
+        """Look up and build the LightConfig for one configured light by
+        entity id. None if it's no longer configured (defensive; shouldn't
+        happen for a light_entity sourced from self.lights itself)."""
+        light_data = next(
+            (l for l in self.lights if l.get(CONF_ENTITY) == light_entity), None
+        )
+        return build_light_config(light_data) if light_data is not None else None
+
     async def _async_update_data(self) -> dict[str, LightSchedule]:
         now = dt_util.now()
         now_hour = now.hour + now.minute / 60
@@ -291,6 +366,9 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         alone never produced that in v1 either).
         """
         if not light_entity:
+            return
+
+        if self._is_overridden(light_entity):
             return
 
         desired_key = get_desired_fire_key(now, light, segments, sunset_hour)
@@ -382,6 +460,9 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         gate in _auto_fire owns transitions, this only owns color-within-key.
         """
         for light_entity, schedule in self.data.items():
+            if self._is_overridden(light_entity):
+                continue  # Force White / Salute / Emergency Mode owns this light right now
+
             last_key = self._last_fire_key.get(light_entity)
             if not last_key or not last_key.startswith("event:"):
                 continue  # not currently driving a stable event window
@@ -407,3 +488,307 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             # Seed before the await, same reasoning as _auto_fire above.
             self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
             await self._call_fire_command(light_entity, light, last_key, command)
+
+    async def async_force_fire(self, light_entities: Iterable[str] | None = None) -> None:
+        """Recompute and unconditionally re-issue the current desired
+        command for the given lights (or every configured light),
+        bypassing the _last_fire_key/_last_fired_rgb_color gate that
+        _auto_fire normally uses to avoid redundant firing.
+
+        This is the real Catch Up/Sync primitive -- confirmed against what
+        chromacal.html's forceSyncAllBridges() actually needed to
+        accomplish, not its literal implementation (which republished to a
+        bridge helper entity that no longer exists in v2). The functional
+        need it served -- make the physical light reflect what SHOULD be
+        showing right now, even if this coordinator's own bookkeeping
+        thinks nothing changed -- maps onto bypassing the fire gate, not
+        onto coordinator.async_refresh(): refresh() recomputes self.data
+        for the sensors but leaves the gate untouched, so a light that's
+        drifted out of sync with what the coordinator last told it
+        wouldn't get re-fired at all.
+
+        Also the shared "resume the real schedule right now" primitive for
+        when Salute finishes, Force White's window expires, and Emergency
+        Mode is cancelled. v1 resumed by deleting _lastFireKey and calling
+        update() -- that doesn't translate here: this coordinator's
+        first-update guard would just re-observe and defer the actual fire
+        by a full 5-minute cycle instead of firing immediately, which is
+        worse than doing nothing.
+        """
+        now = dt_util.now()
+        now_hour = now.hour + now.minute / 60
+        sunset_hour = self._resolve_sunset()
+        config = build_schedule_config(
+            self.region,
+            self.categories,
+            skipped_events=frozenset(self.skipped_events),
+            tonight_skips=frozenset(self.tonight_skips),
+        )
+        holidays = get_enabled_holidays(config, now.year)
+        targets = set(light_entities) if light_entities is not None else None
+
+        for light_data in self.lights:
+            light_entity = light_data.get(CONF_ENTITY, "")
+            if not light_entity or (targets is not None and light_entity not in targets):
+                continue
+            light = build_light_config(light_data)
+            segments = get_night_segments(now, light, config, holidays, sunset_hour=sunset_hour)
+            desired_key = get_desired_fire_key(now, light, segments, sunset_hour)
+            if desired_key in _NO_FIRE_KEYS:
+                continue
+
+            command = build_fire_command(desired_key, light, segments, now)
+
+            # Reseed the gate before the await, same reasoning as _auto_fire.
+            self._last_fire_key[light_entity] = desired_key
+            if command is not None and "rgb_color" in command.service_data:
+                self._last_fired_rgb_color[light_entity] = command.service_data["rgb_color"]
+            else:
+                self._last_fired_rgb_color.pop(light_entity, None)
+
+            if command is None:
+                continue
+            await self._call_fire_command(light_entity, light, desired_key, command)
+
+    def async_fire_and_forget(self, coro: Coroutine[Any, Any, None], name: str) -> None:
+        """Schedule a coroutine to run without the caller awaiting it,
+        tied to this config entry's lifecycle -- used by button.py so a
+        button press (Salute, Catch Up/Sync, Force White) returns
+        immediately instead of blocking the frontend/automation caller for
+        however long the underlying action takes.
+
+        entry.async_create_task(), not hass.async_create_task(): the
+        latter's own docstring says it's intended for HA core internal use
+        only and integrations should use the config-entry-scoped methods
+        instead -- caught during the Phase 5b callback-dispatch audit.
+        The practical difference: HA actually waits for entry-tracked
+        tasks during this config entry's own unload, not just global
+        shutdown, so unloading ChromaCal mid-Salute is handled correctly.
+        """
+        self._entry.async_create_task(self.hass, coro, name=name)
+
+    async def async_catch_up(self) -> None:
+        """Catch Up/Sync button: force every configured light to match
+        what the schedule says right now, regardless of whether this
+        coordinator thinks anything has changed."""
+        await self.async_force_fire()
+
+    async def async_fire_salute(self, pace: str = "standard") -> None:
+        """21 Gun Salute: 3 volleys + Taps + fade-out, broadcast across
+        every configured light (no per-light participation opt-out yet --
+        see CLAUDE.md's deferred-decisions note; all lights participate
+        for now), then resumes the real schedule immediately via
+        async_force_fire().
+
+        Guarded against re-entry synchronously -- checked and set before
+        any await -- so two button presses racing each other can't both
+        pass the guard, same discipline as _auto_fire's state mutation.
+        """
+        if self.salute_active:
+            _LOGGER.warning("ChromaCal: Salute already in progress, ignoring press")
+            return
+        self.salute_active = True
+        # Without this, ChromaCalSaluteButton.available (reads
+        # coordinator.salute_active) never actually gets re-published to
+        # HA's state machine -- caught during the Phase 5b listener-
+        # notification audit, same bug class as the Emergency switch fix
+        # above, a third occurrence of the same oversight.
+        self.async_update_listeners()
+
+        lights_by_entity = {
+            light_data[CONF_ENTITY]: build_light_config(light_data)
+            for light_data in self.lights
+            if light_data.get(CONF_ENTITY)
+        }
+        for light_entity in lights_by_entity:
+            self._manual_override[light_entity] = None  # indefinite, cleared in finally below
+
+        _LOGGER.info(
+            "ChromaCal: 21 Gun Salute commencing -- 3 volleys, %d light(s)", len(lights_by_entity)
+        )
+        try:
+            for step in get_salute_steps(pace):
+                if step.rgb is None:
+                    command = FireCommand("light", "turn_off", {"transition": step.transition})
+                else:
+                    r, g, b = step.rgb
+                    command = FireCommand(
+                        "light",
+                        "turn_on",
+                        {
+                            "rgb_color": [r, g, b],
+                            "brightness_pct": step.brightness_pct,
+                            "transition": step.transition,
+                        },
+                    )
+                await asyncio.gather(
+                    *(
+                        self._call_fire_command(light_entity, light, step.label, command)
+                        for light_entity, light in lights_by_entity.items()
+                    )
+                )
+                await asyncio.sleep(step.hold_ms / 1000)
+            _LOGGER.info("ChromaCal: 21 Gun Salute complete -- resuming schedule")
+        finally:
+            for light_entity in lights_by_entity:
+                self._manual_override.pop(light_entity, None)
+            self.salute_active = False
+            self.async_update_listeners()  # same reasoning as above, the reverse transition
+            await self.async_force_fire(lights_by_entity.keys())
+
+    async def async_start_emergency(self, pattern: str = "red-blue") -> None:
+        """Emergency Mode: broadcast an alternating color pattern across
+        every configured light until async_stop_emergency() is called.
+        Backing entity is a switch, not a button -- this is genuinely
+        start/stop with a real running state, not a fire-once trigger (see
+        the Phase 5b plan discussion for why that's a deliberate deviation
+        from CLAUDE.md's literal "button" wording for this one action).
+        """
+        if self.emergency_active:
+            return
+        self.emergency_active = True
+
+        lights_by_entity = {
+            light_data[CONF_ENTITY]: build_light_config(light_data)
+            for light_data in self.lights
+            if light_data.get(CONF_ENTITY)
+        }
+        for light_entity in lights_by_entity:
+            self._manual_override[light_entity] = None  # indefinite, until async_stop_emergency
+
+        # Breadcrumb only -- not resumed from on restart, see
+        # async_check_emergency_breadcrumb() and this flag's own docstring
+        # in const.py.
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_EMERGENCY_WAS_ACTIVE: True},
+        )
+        _LOGGER.error(
+            "ChromaCal: EMERGENCY MODE ACTIVATED -- %d light(s), pattern=%s",
+            len(lights_by_entity),
+            pattern,
+        )
+
+        sequence = get_emergency_sequence(pattern)
+        cycle_index = {"value": 0}
+
+        async def _fire(_now: datetime) -> None:
+            color = sequence[cycle_index["value"] % len(sequence)]
+            cycle_index["value"] += 1
+            if color is None:
+                command = FireCommand("light", "turn_off", {"transition": EMERGENCY_TRANSITION})
+            else:
+                r, g, b = color
+                command = FireCommand(
+                    "light",
+                    "turn_on",
+                    {"rgb_color": [r, g, b], "brightness_pct": 100, "transition": EMERGENCY_TRANSITION},
+                )
+            await asyncio.gather(
+                *(
+                    self._call_fire_command(light_entity, light, "emergency", command)
+                    for light_entity, light in lights_by_entity.items()
+                )
+            )
+
+        await _fire(dt_util.utcnow())  # fire immediately on activation, matching v1
+        self._emergency_unsub = async_track_time_interval(
+            self.hass, _fire, EMERGENCY_FIRE_INTERVAL, name="chromacal_emergency"
+        )
+        # Also tied to entry unload (e.g. the integration is removed/reloaded
+        # while HA keeps running) -- calling an already-cancelled unsub from
+        # async_stop_emergency later is a safe no-op, same pattern already
+        # used for switch.py's dynamic tonight-skip listener.
+        self._entry.async_on_unload(self._emergency_unsub)
+
+        # Without this, the switch's own is_on keeps reporting stale ('off')
+        # until some unrelated coordinator update happens to fire next --
+        # same bug already caught and fixed once for the skip switches in
+        # Phase 5a. async_update_listeners() (not a full async_refresh())
+        # is the right-sized tool: just tell CoordinatorEntity listeners to
+        # re-read state and write it, without re-running _async_update_data.
+        self.async_update_listeners()
+
+    async def async_stop_emergency(self) -> None:
+        """Cancel Emergency Mode and resume the real schedule immediately."""
+        if not self.emergency_active:
+            return
+        self.emergency_active = False
+        self.async_update_listeners()  # same reasoning as async_start_emergency above
+        if self._emergency_unsub is not None:
+            self._emergency_unsub()
+            self._emergency_unsub = None
+
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_EMERGENCY_WAS_ACTIVE: False},
+        )
+        _LOGGER.warning("ChromaCal: Emergency Mode cancelled -- resuming schedule")
+
+        light_entities = [ld[CONF_ENTITY] for ld in self.lights if ld.get(CONF_ENTITY)]
+        for light_entity in light_entities:
+            self._manual_override.pop(light_entity, None)
+        await self.async_force_fire(light_entities)
+
+    async def async_fire_force_white(self, light_entity: str) -> None:
+        """Force White: immediately set one light to its own configured
+        warm-white Kelvin at full brightness, then suppress auto-fire for
+        that light for FORCE_WHITE_OVERRIDE_MINUTES before automatically
+        resuming the real schedule -- matches v1's OVERRIDE_MINS exactly,
+        a real-world-tuned value, not an arbitrary one to relitigate here.
+
+        Uses the light's own warmwhite_kelvin_mireds (option (a) from the
+        Phase 5b plan discussion) rather than a paired Kelvin-picker
+        entity -- matches where the options-flow phase is already headed
+        for per-light config.
+        """
+        light = self._light_config_for(light_entity)
+        if light is None:
+            return
+
+        kelvin = round(1_000_000 / (light.warmwhite_kelvin_mireds or 250))
+        command = build_force_white_command(kelvin)
+        self._manual_override[light_entity] = dt_util.now() + timedelta(
+            minutes=FORCE_WHITE_OVERRIDE_MINUTES
+        )
+        await self._call_fire_command(light_entity, light, "force_white", command)
+
+        async def _resume(_now: datetime) -> None:
+            self._manual_override.pop(light_entity, None)
+            await self.async_force_fire([light_entity])
+
+        async_call_later(
+            self.hass, timedelta(minutes=FORCE_WHITE_OVERRIDE_MINUTES), _resume
+        )
+
+    async def async_check_emergency_breadcrumb(self) -> None:
+        """Called once from __init__.py right after coordinator setup. If
+        CONF_EMERGENCY_WAS_ACTIVE is still True, HA went down while
+        Emergency Mode was actively broadcasting -- log a warning and
+        raise a persistent_notification so a human actually sees it (a log
+        line alone isn't enough given what Emergency Mode is for -- see
+        the Phase 5b plan discussion), then clear the flag so it doesn't
+        refire on a later, unrelated restart. Emergency Mode's own runtime
+        state is never resumed from this -- it's already fresh/False from
+        __init__, by design.
+        """
+        if not self._entry.options.get(CONF_EMERGENCY_WAS_ACTIVE, False):
+            return
+
+        _LOGGER.warning(
+            "ChromaCal: Emergency Mode was active before restart and is no longer running"
+        )
+        persistent_notification.async_create(
+            self.hass,
+            (
+                "Emergency Mode was active before Home Assistant restarted and "
+                "is **no longer running**. If you still need it, turn "
+                "`switch.chromacal_emergency_mode` back on."
+            ),
+            title="ChromaCal: Emergency Mode stopped",
+            notification_id=f"{DOMAIN}_emergency_was_active",
+        )
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, CONF_EMERGENCY_WAS_ACTIVE: False},
+        )
