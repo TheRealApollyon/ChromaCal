@@ -47,7 +47,7 @@ def _button_id(registry, entry_id: str, suffix: str) -> str | None:
     return registry.async_get_entity_id("button", DOMAIN, f"{entry_id}{suffix}")
 
 
-async def test_salute_catchup_and_force_white_buttons_are_created(hass, freezer):
+async def test_salute_catchup_stop_and_force_white_buttons_are_created(hass, freezer):
     freezer.move_to("2026-07-04 12:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
     entry = await _setup_entry(hass, "test_buttons_created")
@@ -55,6 +55,7 @@ async def test_salute_catchup_and_force_white_buttons_are_created(hass, freezer)
     registry = er.async_get(hass)
     assert _button_id(registry, entry.entry_id, "_salute") is not None
     assert _button_id(registry, entry.entry_id, "_catch_up_sync") is not None
+    assert _button_id(registry, entry.entry_id, "_stop") is not None
     assert _button_id(registry, entry.entry_id, f"_{LIGHT_ENTITY}_force_white") is not None
 
 
@@ -169,9 +170,9 @@ async def test_force_white_sets_a_thirty_minute_expiry_on_the_override(hass, fre
     await coordinator.async_fire_force_white(LIGHT_ENTITY)
     await hass.async_block_till_done()
 
-    expiry = coordinator._manual_override[LIGHT_ENTITY]
-    assert expiry is not None
-    assert (expiry - dt_util.now()).total_seconds() == 30 * 60
+    override = coordinator._manual_override[LIGHT_ENTITY]
+    assert override.source == "force_white"
+    assert (override.expires_at - dt_util.now()).total_seconds() == 30 * 60
 
 
 async def test_force_white_resumes_the_real_schedule_when_override_is_cleared(hass, freezer):

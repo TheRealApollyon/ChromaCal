@@ -43,6 +43,7 @@ for a reset that has one precisely-known trigger instant per day.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Callable, Coroutine, Iterable
 from dataclasses import dataclass
@@ -87,6 +88,37 @@ _LOGGER = logging.getLogger(__name__)
 UPDATE_INTERVAL = timedelta(minutes=5)
 FORCE_WHITE_OVERRIDE_MINUTES = 30  # matches v1's OVERRIDE_MINS -- real-world tuned, not arbitrary
 EMERGENCY_FIRE_INTERVAL = timedelta(seconds=5)  # matches v1's default CFG.emergencyInterval
+
+# _manual_override source tags -- which mechanism currently owns a light's
+# override, so cleanup only ever clears an entry it still owns (see
+# ManualOverride and _clear_override_if_owned). Precedence, highest first:
+# emergency > salute > force_white. The only place that matters operationally
+# is async_start_emergency(), which cancels a running Salute before taking
+# over; everything else (Force White vs. either) is handled for free by
+# ownership-aware overwriting/clearing, no extra guard needed.
+_OVERRIDE_SOURCE_FORCE_WHITE = "force_white"
+_OVERRIDE_SOURCE_SALUTE = "salute"
+_OVERRIDE_SOURCE_EMERGENCY = "emergency"
+
+
+@dataclass(frozen=True)
+class ManualOverride:
+    """One light's current override: who owns it, and until when.
+
+    expires_at=None means indefinite -- suppressed until whoever set it
+    (Salute, Emergency Mode) explicitly clears it. A real datetime means
+    bounded (Force White's 30-minute window); self-expiry past that point
+    is the caller's job via async_call_later, not this dataclass's.
+
+    Added in the multi-source cancel/Stop phase after a real bug: with a
+    bare `datetime | None` and no owner tag, one source's cleanup could
+    silently clear a *different* source's still-active override on the
+    same light (e.g. Salute finishing while Emergency Mode had since taken
+    over the same light) -- see _clear_override_if_owned().
+    """
+
+    source: str
+    expires_at: datetime | None = None
 
 
 @dataclass
@@ -161,25 +193,27 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # tonight_skips reset above, same date guard.
         self.todays_candidate_names: set[str] = set()
         # Manual override: suppresses auto-fire and the color-cycle recheck
-        # for a light, ported from v1's _schedOverride. Value is the local
-        # expiry datetime (Force White's bounded 30-minute window) or None
-        # for "suppressed indefinitely until explicitly cleared" (Salute in
-        # progress, Emergency Mode active). In-memory only, like
-        # tonight_skips above -- losing an active override on an HA restart
-        # is an accepted tradeoff for Force White and Salute (same
-        # reasoning as tonight_skips: restarts are rare/deliberate). NOT
-        # accepted as-is for Emergency Mode specifically -- silently losing
-        # an active safety broadcast is a worse failure than a decorative
-        # override resetting early, so that one gets its own narrow
-        # persisted breadcrumb (CONF_EMERGENCY_WAS_ACTIVE) purely to warn a
-        # human it happened, not to resume the broadcast -- see
+        # for a light, ported from v1's _schedOverride. See ManualOverride
+        # for the source/expiry shape. In-memory only, like tonight_skips
+        # above -- losing an active override on an HA restart is an
+        # accepted tradeoff for Force White and Salute (same reasoning as
+        # tonight_skips: restarts are rare/deliberate). NOT accepted as-is
+        # for Emergency Mode specifically -- silently losing an active
+        # safety broadcast is a worse failure than a decorative override
+        # resetting early, so that one gets its own narrow persisted
+        # breadcrumb (CONF_EMERGENCY_WAS_ACTIVE) purely to warn a human it
+        # happened, not to resume the broadcast -- see
         # async_check_emergency_breadcrumb().
-        self._manual_override: dict[str, datetime | None] = {}
+        self._manual_override: dict[str, ManualOverride] = {}
         # Re-entry guard for the Salute sequence -- checked and set
         # synchronously, before any await, so two rapid button presses
         # can't both pass the guard. Same atomicity discipline as the
         # Phase 4c auto-fire race-condition fix.
         self.salute_active: bool = False
+        # The running Salute task, so a second button press (or Emergency
+        # Mode preempting it) can actually cancel it -- see
+        # async_cancel_salute(). None whenever salute_active is False.
+        self._salute_task: asyncio.Task[None] | None = None
         # Emergency Mode's live state. Always starts fresh/False on a new
         # coordinator -- never restored from CONF_EMERGENCY_WAS_ACTIVE,
         # which is a one-shot breadcrumb, not resumable state.
@@ -286,17 +320,29 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
     def _is_overridden(self, light_entity: str) -> bool:
         """True if auto-fire and color-cycling should stand down for this
         light right now. Ported from v1's isOverridden gate. Absent from
-        _manual_override means no override. An entry of None means
-        suppressed indefinitely (Salute in progress, Emergency Mode
-        active) until whoever set it explicitly clears it. A real datetime
-        means suppressed until that time (Force White's bounded window);
-        self-clearing past that point is the caller's job via
-        async_call_later, not this method's.
+        _manual_override means no override; see ManualOverride for what
+        an entry's source/expires_at mean.
         """
-        if light_entity not in self._manual_override:
+        override = self._manual_override.get(light_entity)
+        if override is None:
             return False
-        expiry = self._manual_override[light_entity]
-        return expiry is None or dt_util.now() < expiry
+        return override.expires_at is None or dt_util.now() < override.expires_at
+
+    def _clear_override_if_owned(self, light_entity: str, source: str) -> None:
+        """Clear light_entity's override only if `source` still owns it.
+
+        The ownership-aware alternative to a blind .pop() -- without this,
+        one source's cleanup (Force White's resume timer, Salute's finally
+        block, Emergency's stop) can clear a *different* source's still-
+        active override on the same light, if that source took over in
+        the meantime. Every cleanup path uses this instead of popping
+        directly; async_stop_all_overrides() is the one deliberate
+        exception, since an unconditional clear is exactly what "stop
+        everything" means.
+        """
+        current = self._manual_override.get(light_entity)
+        if current is not None and current.source == source:
+            self._manual_override.pop(light_entity, None)
 
     def _light_config_for(self, light_entity: str) -> LightConfig | None:
         """Look up and build the LightConfig for one configured light by
@@ -550,12 +596,15 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 continue
             await self._call_fire_command(light_entity, light, desired_key, command)
 
-    def async_fire_and_forget(self, coro: Coroutine[Any, Any, None], name: str) -> None:
+    def async_fire_and_forget(
+        self, coro: Coroutine[Any, Any, None], name: str
+    ) -> asyncio.Task[None]:
         """Schedule a coroutine to run without the caller awaiting it,
         tied to this config entry's lifecycle -- used by button.py so a
         button press (Salute, Catch Up/Sync, Force White) returns
         immediately instead of blocking the frontend/automation caller for
-        however long the underlying action takes.
+        however long the underlying action takes. Returns the Task so
+        callers that need to cancel it later (async_toggle_salute) can.
 
         entry.async_create_task(), not hass.async_create_task(): the
         latter's own docstring says it's intended for HA core internal use
@@ -565,13 +614,53 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         tasks during this config entry's own unload, not just global
         shutdown, so unloading ChromaCal mid-Salute is handled correctly.
         """
-        self._entry.async_create_task(self.hass, coro, name=name)
+        return self._entry.async_create_task(self.hass, coro, name=name)
 
     async def async_catch_up(self) -> None:
         """Catch Up/Sync button: force every configured light to match
         what the schedule says right now, regardless of whether this
         coordinator thinks anything has changed."""
         await self.async_force_fire()
+
+    async def async_toggle_salute(self, pace: str = "standard") -> None:
+        """21 Gun Salute button's actual entry point: press to start,
+        press again while running to cancel. A single method so button.py
+        never has to know which action applies -- it just calls this.
+
+        Declines (logs, no-ops) if Emergency Mode is active: Emergency
+        outranks Salute (see async_start_emergency(), which is the
+        reverse direction -- it cancels a running Salute automatically
+        rather than declining, since Emergency starting is the one place
+        a higher-precedence source needs to actively preempt a lower one
+        instead of just naturally overwriting its override entry).
+        """
+        if self.salute_active:
+            await self.async_cancel_salute()
+            return
+        if self.emergency_active:
+            _LOGGER.warning("ChromaCal: Emergency Mode is active, ignoring Salute press")
+            return
+        self._salute_task = self.async_fire_and_forget(
+            self.async_fire_salute(pace), name="chromacal_salute"
+        )
+
+    async def async_cancel_salute(self) -> None:
+        """Cancel a running Salute and resume the real schedule
+        immediately. Only meaningful while salute_active is True.
+
+        The actual cleanup (clearing owned overrides, resetting
+        salute_active, notifying listeners, force-firing the resume)
+        lives entirely in async_fire_salute()'s own finally block --
+        Python runs finally on a cancelled task exactly the same as on
+        normal completion, so there's nothing extra to do here beyond
+        triggering the cancellation and waiting for that unwind to land.
+        """
+        if self._salute_task is None:
+            return
+        self._salute_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._salute_task
+        self._salute_task = None
 
     async def async_fire_salute(self, pace: str = "standard") -> None:
         """21 Gun Salute: 3 volleys + Taps + fade-out, broadcast across
@@ -580,15 +669,11 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         for now), then resumes the real schedule immediately via
         async_force_fire().
 
-        Guarded against re-entry synchronously -- checked and set before
-        any await -- so two button presses racing each other can't both
-        pass the guard, same discipline as _auto_fire's state mutation.
+        Not called directly by button.py -- see async_toggle_salute(),
+        which owns the start-vs-cancel decision and re-entry guarding.
         """
-        if self.salute_active:
-            _LOGGER.warning("ChromaCal: Salute already in progress, ignoring press")
-            return
         self.salute_active = True
-        # Without this, ChromaCalSaluteButton.available (reads
+        # Without this, ChromaCalSaluteButton's `running` attribute (reads
         # coordinator.salute_active) never actually gets re-published to
         # HA's state machine -- caught during the Phase 5b listener-
         # notification audit, same bug class as the Emergency switch fix
@@ -601,7 +686,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             if light_data.get(CONF_ENTITY)
         }
         for light_entity in lights_by_entity:
-            self._manual_override[light_entity] = None  # indefinite, cleared in finally below
+            self._manual_override[light_entity] = ManualOverride(source=_OVERRIDE_SOURCE_SALUTE)
 
         _LOGGER.info(
             "ChromaCal: 21 Gun Salute commencing -- 3 volleys, %d light(s)", len(lights_by_entity)
@@ -630,8 +715,11 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 await asyncio.sleep(step.hold_ms / 1000)
             _LOGGER.info("ChromaCal: 21 Gun Salute complete -- resuming schedule")
         finally:
+            # Runs identically whether the loop above finished normally or
+            # was interrupted by cancellation (async_cancel_salute) --
+            # Python guarantees finally executes on both exit paths.
             for light_entity in lights_by_entity:
-                self._manual_override.pop(light_entity, None)
+                self._clear_override_if_owned(light_entity, _OVERRIDE_SOURCE_SALUTE)
             self.salute_active = False
             self.async_update_listeners()  # same reasoning as above, the reverse transition
             await self.async_force_fire(lights_by_entity.keys())
@@ -643,9 +731,19 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         start/stop with a real running state, not a fire-once trigger (see
         the Phase 5b plan discussion for why that's a deliberate deviation
         from CLAUDE.md's literal "button" wording for this one action).
+
+        Emergency outranks Salute: starting Emergency while a Salute is
+        running cancels it first, rather than letting both loops fight
+        over the same light on independent cadences (confirmed as a real,
+        observable conflict before this fix -- see the multi-source
+        cancel/Stop plan discussion). This is the one place precedence
+        needs an active preempt; Force White vs. either is handled for
+        free by ownership-aware override overwriting, no guard needed.
         """
         if self.emergency_active:
             return
+        if self.salute_active:
+            await self.async_cancel_salute()
         self.emergency_active = True
 
         lights_by_entity = {
@@ -654,7 +752,11 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             if light_data.get(CONF_ENTITY)
         }
         for light_entity in lights_by_entity:
-            self._manual_override[light_entity] = None  # indefinite, until async_stop_emergency
+            # Indefinite, until async_stop_emergency. Unconditional
+            # overwrite -- if Force White owned this light's override,
+            # Emergency simply takes over; Force White's own resume timer
+            # will no-op later since it checks ownership before clearing.
+            self._manual_override[light_entity] = ManualOverride(source=_OVERRIDE_SOURCE_EMERGENCY)
 
         # Breadcrumb only -- not resumed from on restart, see
         # async_check_emergency_breadcrumb() and this flag's own docstring
@@ -727,7 +829,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
 
         light_entities = [ld[CONF_ENTITY] for ld in self.lights if ld.get(CONF_ENTITY)]
         for light_entity in light_entities:
-            self._manual_override.pop(light_entity, None)
+            self._clear_override_if_owned(light_entity, _OVERRIDE_SOURCE_EMERGENCY)
         await self.async_force_fire(light_entities)
 
     async def async_fire_force_white(self, light_entity: str) -> None:
@@ -748,18 +850,54 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
 
         kelvin = round(1_000_000 / (light.warmwhite_kelvin_mireds or 250))
         command = build_force_white_command(kelvin)
-        self._manual_override[light_entity] = dt_util.now() + timedelta(
-            minutes=FORCE_WHITE_OVERRIDE_MINUTES
+        self._manual_override[light_entity] = ManualOverride(
+            source=_OVERRIDE_SOURCE_FORCE_WHITE,
+            expires_at=dt_util.now() + timedelta(minutes=FORCE_WHITE_OVERRIDE_MINUTES),
         )
         await self._call_fire_command(light_entity, light, "force_white", command)
 
         async def _resume(_now: datetime) -> None:
-            self._manual_override.pop(light_entity, None)
+            # Ownership-aware: if Salute or Emergency took over this light
+            # since this timer was scheduled, this must NOT clear their
+            # override -- see _clear_override_if_owned() and the
+            # multi-source cancel/Stop plan discussion for the bug this
+            # closes.
+            self._clear_override_if_owned(light_entity, _OVERRIDE_SOURCE_FORCE_WHITE)
             await self.async_force_fire([light_entity])
 
         async_call_later(
             self.hass, timedelta(minutes=FORCE_WHITE_OVERRIDE_MINUTES), _resume
         )
+
+    async def async_stop_all_overrides(self) -> None:
+        """button.chromacal_stop: cancel whatever override is currently
+        active -- a running Salute, Emergency Mode, or any light's Force
+        White window -- across every configured light, then resolve and
+        push the real current schedule. A third, simpler entry point into
+        the same cancel-and-resume action as Salute's own press-again
+        (async_toggle_salute) and the Emergency switch's turn_off -- both
+        of those stay as they are; this is for someone who just wants
+        "make it normal again" without knowing what's currently wrong.
+
+        Must be a safe no-op if nothing is overridden: each branch below
+        is itself a no-op when its condition is false, and the final
+        force-fire only runs if there was actually a Force White entry (or
+        anything else) left to resolve -- so with nothing active, this
+        issues zero service calls.
+        """
+        if self.salute_active:
+            await self.async_cancel_salute()
+        if self.emergency_active:
+            await self.async_stop_emergency()
+        if self._manual_override:
+            # Whatever's left at this point can only be Force White
+            # entries (Salute/Emergency's own cleanup above already
+            # cleared theirs) -- an unconditional clear, not ownership-
+            # checked, since "stop everything" is exactly what this button
+            # means; no other source's cleanup should be racing with it.
+            light_entities = list(self._manual_override)
+            self._manual_override.clear()
+            await self.async_force_fire(light_entities)
 
     async def async_check_emergency_breadcrumb(self) -> None:
         """Called once from __init__.py right after coordinator setup. If

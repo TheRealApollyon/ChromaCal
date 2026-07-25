@@ -1,5 +1,5 @@
 """Button platform for ChromaCal's one-shot quick-control actions: 21 Gun
-Salute, Catch Up/Sync (both global, one entity total), and Force White
+Salute, Catch Up/Sync, Stop (all global, one entity each), and Force White
 (per configured light -- v1 scoped this to whichever light was selected in
 its single-page-app tab, and HA has no equivalent "currently active light"
 concept for backend entities, so it becomes one button per light instead).
@@ -8,21 +8,27 @@ Emergency Mode is deliberately NOT here -- it's a switch (see switch.py),
 since it's genuinely start/stop with a real running state, not a fire-once
 trigger. See the Phase 5b plan discussion for that reasoning.
 
-All three buttons fire their coordinator method via
+Catch Up/Sync and Force White fire their coordinator method via
 coordinator.async_fire_and_forget() rather than awaiting it directly from
-async_press(): Salute runs ~50-60 real seconds of sequenced service calls,
-and awaiting that from async_press() would stall the entity-service-call
-caller (frontend spinner, or any automation's button.press action) for the
-whole duration. v1's own onclick handler never awaited its async function
-either. Catch Up/Sync and Force White are fast in practice but get the
-same treatment for consistency and because there's no reason for a button
-press to ever block its caller here. async_fire_and_forget() wraps
-entry.async_create_task(), not the bare hass.async_create_task() this
-originally used -- see that method's docstring for why (caught during the
-Phase 5b callback-dispatch audit).
+async_press(): a press should never block its caller (frontend spinner,
+or any automation's button.press action), even though these two are fast
+in practice. async_fire_and_forget() wraps entry.async_create_task(), not
+the bare hass.async_create_task() this originally used -- see that
+method's docstring for why (caught during the Phase 5b callback-dispatch
+audit).
+
+Salute is different: async_press() calls coordinator.async_toggle_salute()
+directly and awaits it, since that method itself decides whether to start
+(fire-and-forget, same reasoning as above) or cancel a running Salute
+(fast -- a task cancellation plus quick cleanup, not worth a separate
+fire-and-forget path). Stop (button.chromacal_stop) is the same shape:
+awaits coordinator.async_stop_all_overrides() directly, since cancelling
+whatever's active is comparably fast.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -51,6 +57,7 @@ async def async_setup_entry(
     entities: list[ButtonEntity] = [
         ChromaCalSaluteButton(coordinator, entry.entry_id),
         ChromaCalCatchUpButton(coordinator, entry.entry_id),
+        ChromaCalStopButton(coordinator, entry.entry_id),
     ]
     entities.extend(
         ChromaCalForceWhiteButton(coordinator, entry.entry_id, light_entity)
@@ -60,7 +67,17 @@ async def async_setup_entry(
 
 
 class ChromaCalSaluteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity):
-    """21 Gun Salute -- 3 volleys + Taps across every configured light."""
+    """21 Gun Salute -- 3 volleys + Taps across every configured light.
+
+    Press again while running to cancel: Salute can also start on its own
+    from an auto-fired event (Memorial Day, POW/MIA, a Memorial-type
+    personal event), not just a button press, so it needs the same
+    interrupt capability Emergency Mode already has via its switch's
+    turn_off. Deliberately NOT marked unavailable while running (that was
+    the original design) -- a second press is a real, meaningful action
+    now, not something to grey out. The `running` attribute is how the UI
+    shows current state instead.
+    """
 
     _attr_has_entity_name = True
     _attr_name = "21 Gun Salute"
@@ -72,17 +89,14 @@ class ChromaCalSaluteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntit
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
 
     @property
-    def available(self) -> bool:
-        # Greyed out while a Salute is already running -- the coordinator's
-        # own re-entry guard is the authoritative protection (a second
-        # press could still reach async_press() via an automation calling
-        # button.press directly); this is just honest UI feedback on top.
-        return super().available and not self.coordinator.salute_active
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"running": self.coordinator.salute_active}
 
     async def async_press(self) -> None:
-        self.coordinator.async_fire_and_forget(
-            self.coordinator.async_fire_salute(), name="chromacal_salute"
-        )
+        # Not fire-and-forget at this layer: async_toggle_salute() itself
+        # decides whether to start (fire-and-forget internally) or cancel
+        # a running Salute (fast), so awaiting it here never blocks long.
+        await self.coordinator.async_toggle_salute()
 
 
 class ChromaCalCatchUpButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity):
@@ -103,6 +117,32 @@ class ChromaCalCatchUpButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEnti
         self.coordinator.async_fire_and_forget(
             self.coordinator.async_catch_up(), name="chromacal_catch_up_sync"
         )
+
+
+class ChromaCalStopButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity):
+    """Cancel whatever override is currently active -- a running Salute,
+    Emergency Mode, or any light's Force White window -- across every
+    configured light, and resume the real schedule immediately.
+
+    A third, simpler entry point into the same cancel-and-resume action
+    as Salute's own press-again-to-cancel and the Emergency switch's
+    turn_off (both of those stay as they are) -- for someone who just
+    wants "make it normal again" without knowing what's currently
+    overridden. Safe no-op if nothing is: see
+    coordinator.async_stop_all_overrides()'s own docstring.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Stop"
+    _attr_icon = "mdi:stop-circle-outline"
+
+    def __init__(self, coordinator: ChromaCalCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_stop"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_stop_all_overrides()
 
 
 class ChromaCalForceWhiteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity):

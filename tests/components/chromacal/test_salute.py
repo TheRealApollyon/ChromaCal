@@ -9,7 +9,7 @@ override lifecycle, and that the schedule actually resumes afterward.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
@@ -118,43 +118,47 @@ async def test_salute_suppresses_autofire_while_in_progress(hass, freezer):
     assert coordinator._is_overridden(LIGHT_ENTITY) is False
 
 
-async def test_salute_button_reports_unavailable_while_running(hass, freezer):
+async def test_salute_button_running_attribute_tracks_state(hass, freezer):
     """Regression test: async_fire_salute() mutated salute_active without
-    ever calling async_update_listeners(), so the button's `available`
-    property (which reads salute_active) never actually got re-published
+    ever calling async_update_listeners(), so the button's `running`
+    attribute (which reads salute_active) never actually got re-published
     to HA's state machine. Caught during the Phase 5b listener-
-    notification audit, not by the original test suite.
+    notification audit, not by the original test suite. The button is no
+    longer marked unavailable while running (see the multi-source cancel/
+    Stop plan discussion -- a second press is now meaningful, not
+    something to grey out), so this checks the attribute instead.
     """
     freezer.move_to("2026-07-04 12:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
 
-    entry = await _setup_entry(hass, "test_salute_button_availability")
+    entry = await _setup_entry(hass, "test_salute_button_running_attr")
     coordinator = entry.runtime_data
     registry = er.async_get(hass)
     entity_id = registry.async_get_entity_id("button", DOMAIN, f"{entry.entry_id}_salute")
 
-    assert hass.states.get(entity_id).state != "unavailable"
+    assert hass.states.get(entity_id).attributes["running"] is False
 
     async def _fake_sleep(_seconds):
-        assert hass.states.get(entity_id).state == "unavailable"
+        assert hass.states.get(entity_id).attributes["running"] is True
 
     with patch("custom_components.chromacal.coordinator.asyncio.sleep", new=_fake_sleep):
         await coordinator.async_fire_salute("standard")
     await hass.async_block_till_done()
 
-    assert hass.states.get(entity_id).state != "unavailable"
+    assert hass.states.get(entity_id).attributes["running"] is False
 
 
-async def test_salute_reentry_guard_blocks_a_second_call_while_running(hass, freezer):
+async def test_toggle_salute_button_press_delegates_to_the_coordinator(hass, freezer):
     freezer.move_to("2026-07-04 12:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
-    turn_on_calls = async_mock_service(hass, "light", "turn_on")
+    entry = await _setup_entry(hass, "test_salute_button_press")
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("button", DOMAIN, f"{entry.entry_id}_salute")
 
-    entry = await _setup_entry(hass, "test_salute_reentry")
-    coordinator = entry.runtime_data
-    coordinator.salute_active = True  # simulate "already running"
+    with patch.object(
+        entry.runtime_data, "async_toggle_salute", new=AsyncMock()
+    ) as mock_toggle:
+        await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+        await hass.async_block_till_done()
 
-    await coordinator.async_fire_salute("standard")
-    await hass.async_block_till_done()
-
-    assert len(turn_on_calls) == 0  # guard returned immediately, nothing fired
+    mock_toggle.assert_called_once()
