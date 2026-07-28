@@ -171,6 +171,26 @@ there, move to the real instance — and even then, keep v1 (`chromacal.html`)
 running untouched in parallel as a fallback until v2 has proven itself over a
 few real nights of scheduling.
 
+## Browser tool gotcha — stale preview session breaks screenshots, not DOM checks
+
+Symptom: `mcp__Claude_Browser__computer` screenshot/zoom calls time out with
+"the Browser pane is not displayed, so the page is not compositing frames",
+while `javascript_tool`/`read_page`/`get_page_text` against the same tab keep
+working fine. This happened across a multi-day gap in Phase 7 — the
+underlying browser process's on-screen compositor had gone stale (window no
+longer actively rendering) while the CDP/JS channel stayed alive, since JS
+execution doesn't require actual screen compositing but a real screenshot
+does. New tabs (`tabs_create`) inside the *same* stale preview session did
+not fix it. `preview_stop` on the stale `serverId` followed by a fresh
+`preview_start` did.
+
+If DOM/computed-style checks succeed but screenshots keep failing with that
+exact message, restart the whole preview session first, not just the tab —
+and don't treat DOM introspection as a substitute for an actual visual check
+in the meantime; they catch different classes of bug (see the truncation/
+dead-space fixes in Phase 7, both invisible to DOM math until a real
+screenshot showed them).
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
