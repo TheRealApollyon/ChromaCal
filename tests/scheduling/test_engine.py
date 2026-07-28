@@ -16,6 +16,7 @@ from scheduling.engine import (
     get_desired_fire_key,
     get_enabled_holidays,
     get_night_segments,
+    resolve_cfg_end_hour,
     resolve_tier_winner,
 )
 from scheduling.models import HolidayEvent, NightSegment, SegmentEvent
@@ -290,6 +291,31 @@ def test_desired_key_uses_its_own_20h_fallback_when_sunset_is_none():
     now = datetime(2026, 7, 23, 19, 0)
     segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=None)
     assert get_desired_fire_key(now, FIRE_LIGHT, segments, None) == "pre"  # 19:00 < 20.0 fallback
+
+
+# ── resolve_cfg_end_hour ──────────────────────────────────────────────────────
+
+
+def test_resolve_cfg_end_hour_parses_a_plain_time():
+    light = LightConfig(name="Porch", end_type="time", end_time="23:00")
+    assert resolve_cfg_end_hour(light) == 23
+
+
+def test_resolve_cfg_end_hour_defaults_to_23_for_non_time_end_types():
+    light = LightConfig(name="Porch", end_type="sunrise", end_time=None)
+    assert resolve_cfg_end_hour(light) == 23
+
+
+def test_resolve_cfg_end_hour_defaults_to_23_on_unparseable_end_time():
+    light = LightConfig(name="Porch", end_type="time", end_time="not-a-time")
+    assert resolve_cfg_end_hour(light) == 23
+
+
+def test_resolve_cfg_end_hour_truncates_minutes_matching_v1_behavior():
+    # Ported faithfully from v1's own int(hh) truncation, not "fixed" to
+    # round to the nearest hour -- see get_night_segments/get_desired_fire_key.
+    light = LightConfig(name="Porch", end_type="time", end_time="23:45")
+    assert resolve_cfg_end_hour(light) == 23
 
 
 # ── get_candidates_for_date / all_event_names ────────────────────────────────

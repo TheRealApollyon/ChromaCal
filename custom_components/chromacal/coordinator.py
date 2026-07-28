@@ -74,6 +74,7 @@ from .scheduling.engine import (
     get_desired_fire_key,
     get_enabled_holidays,
     get_night_segments,
+    resolve_cfg_end_hour,
 )
 from .scheduling.fire import FireCommand, build_fire_command
 from .scheduling.models import NightSegment
@@ -130,6 +131,7 @@ class LightSchedule:
     segments: list[NightSegment]
     current_segment: NightSegment | None
     sunset_hour: float | None
+    schedule_end_hour: float
 
 
 class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
@@ -378,6 +380,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 segments=segments,
                 current_segment=current,
                 sunset_hour=sunset_hour,
+                schedule_end_hour=resolve_cfg_end_hour(light),
             )
             if current is not None:
                 _LOGGER.info(

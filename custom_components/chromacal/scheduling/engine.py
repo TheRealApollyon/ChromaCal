@@ -162,6 +162,22 @@ def _parse_hour(time_str: str) -> float:
     return int(hh) + int(mm) / 60
 
 
+def resolve_cfg_end_hour(light: LightConfig) -> float:
+    """The light's configured off-time as a decimal hour, defaulting to 23
+    for any end_type other than a plain time (or an unparseable end_time).
+
+    Was duplicated verbatim inside get_night_segments and
+    get_desired_fire_key; extracted so sensor.py can also expose it (as
+    schedule_end_time) without a third copy of the same four lines.
+    """
+    if light.end_type == "time" and light.end_time:
+        try:
+            return int(light.end_time.split(":")[0])
+        except ValueError:
+            return 23
+    return 23
+
+
 def get_night_segments(
     now: datetime,
     light: LightConfig,
@@ -184,12 +200,7 @@ def get_night_segments(
     def in_window(h: HolidayEvent) -> bool:
         return h.month == month and h.day_start <= day <= h.day_end
 
-    cfg_end = 23
-    if light.end_type == "time" and light.end_time:
-        try:
-            cfg_end = int(light.end_time.split(":")[0])
-        except ValueError:
-            cfg_end = 23
+    cfg_end = resolve_cfg_end_hour(light)
 
     light_name = light.name or ""
     start_offset_min = light.start_offset or 0
@@ -290,12 +301,7 @@ def get_desired_fire_key(
     quietly unified.
     """
     now_hour = now.hour + now.minute / 60
-    cfg_end = 23
-    if light.end_type == "time" and light.end_time:
-        try:
-            cfg_end = int(light.end_time.split(":")[0])
-        except ValueError:
-            cfg_end = 23
+    cfg_end = resolve_cfg_end_hour(light)
     start_offset_min = light.start_offset or 0
     approx_sunset_h = sunset_hour if sunset_hour is not None else 20.0
     color_start_h = approx_sunset_h + start_offset_min / 60

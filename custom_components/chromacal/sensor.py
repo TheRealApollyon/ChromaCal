@@ -71,6 +71,7 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
         attrs: dict[str, Any] = {
             "light_entity": schedule.light_entity,
             "sunset_hour": schedule.sunset_hour,
+            "schedule_end_time": _format_hour(schedule.schedule_end_hour),
             "segments": [
                 {
                     "name": segment.event.name,

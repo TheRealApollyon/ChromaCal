@@ -60,6 +60,9 @@ async def test_sensor_created_for_configured_light(hass):
     assert state.attributes["light_entity"] == "light.front_porch"
     assert "segments" in state.attributes
     assert len(state.attributes["segments"]) >= 1
+    # schedule_end_time: the light's configured off-time, exposed for the
+    # panel's OFF/DAWN timeline marker -- see coordinator.py's LightSchedule.
+    assert state.attributes["schedule_end_time"] == "23:00"
 
 
 async def test_sensor_falls_back_gracefully_without_sun_entity(hass):
