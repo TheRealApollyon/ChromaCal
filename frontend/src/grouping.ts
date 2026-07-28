@@ -53,6 +53,9 @@ export interface LightCardModel {
   currentEnd: string | null;
   segments: SegmentModel[];
   sunsetHour: number | null;
+  /** The light's configured off-time ("HH:MM"), for the OFF/DAWN timeline
+   * marker -- see engine.py's resolve_cfg_end_hour and sensor.py. */
+  scheduleEndTime: string | null;
 }
 
 export interface SkipModel {
@@ -168,6 +171,7 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
       currentEnd: (scheduleAttrs.end_time as string) ?? null,
       segments: ((scheduleAttrs.segments as RawSegment[] | undefined) ?? []).map(mapSegment),
       sunsetHour: (scheduleAttrs.sunset_hour as number) ?? null,
+      scheduleEndTime: (scheduleAttrs.schedule_end_time as string) ?? null,
     });
   }
   lights.sort((a, b) => a.lightName.localeCompare(b.lightName));

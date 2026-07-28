@@ -4,30 +4,21 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { HomeAssistant, PanelInfo } from "./types";
 import { buildViewModel, type LightCardModel, type SkipModel } from "./grouping";
 import { nativeThemeVars, presetThemeVars, PRESET_IDS, PRESET_LABELS, type PresetId } from "./theme";
+import { buildTimelineMarks, segmentPosition } from "./timeline";
 
 const THEME_STORAGE_KEY = "chromacal-panel-theme-preset";
 
-/** 16:00 today through 08:00 tomorrow -- the window every night-schedule
- * segment chromacal produces should fall inside (see get_night_segments). */
-const WINDOW_START_MIN = 16 * 60;
-const WINDOW_SPAN_MIN = 16 * 60;
+/** Multi-color cycling events get the same "spinning" glow pulse v1 used
+ * for its color orb -- ported at the same threshold v1 hardcoded. */
+const SPINNING_COLOR_THRESHOLD = 5;
 
-function hhmmToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(":").map(Number);
-  return h * 60 + m;
-}
-
-/** Positions a HH:MM-HH:MM segment inside the fixed night window above,
- * wrapping anything before 16:00 to "the next day" so a segment crossing
- * midnight still renders as one continuous span. */
-function segmentPosition(startTime: string, endTime: string): { leftPct: number; widthPct: number } {
-  const rawStart = hhmmToMinutes(startTime);
-  const rawEnd = hhmmToMinutes(endTime);
-  const start = rawStart >= WINDOW_START_MIN ? rawStart : rawStart + 24 * 60;
-  const end = rawEnd >= WINDOW_START_MIN ? rawEnd : rawEnd + 24 * 60;
-  const leftPct = Math.max(0, Math.min(100, ((start - WINDOW_START_MIN) / WINDOW_SPAN_MIN) * 100));
-  const rightPct = Math.max(0, Math.min(100, ((end - WINDOW_START_MIN) / WINDOW_SPAN_MIN) * 100));
-  return { leftPct, widthPct: Math.max(0, rightPct - leftPct) };
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const value = parseInt(clean, 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 @customElement("chromacal-panel")
@@ -113,75 +104,81 @@ export class ChromaCalPanel extends LitElement {
           </div>
         </header>
 
-        ${model.lights.length === 0
-          ? html`<div class="empty-state">
-              <p>No lights configured yet.</p>
-              <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
-            </div>`
-          : html`<section class="light-grid ${this.narrow ? "narrow" : ""}">
-              ${model.lights.map((light) => this._renderLightCard(light))}
-            </section>`}
+        <div class="page-grid ${this.narrow ? "narrow" : ""}">
+          <main class="main-col">
+            ${model.lights.length === 0
+              ? html`<div class="empty-state">
+                  <p>No lights configured yet.</p>
+                  <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
+                </div>`
+              : html`<section class="light-grid ${this.narrow ? "narrow" : ""}">
+                  ${model.lights.map((light) => this._renderLightCard(light))}
+                </section>`}
+          </main>
 
-        <section class="skip-section">
-          <h2>Tonight's Skips</h2>
-          ${model.tonightSkips.length === 0
-            ? html`<p class="muted">Nothing skipped tonight.</p>`
-            : html`<div class="chip-row">
-                ${model.tonightSkips.map((skip) => this._renderSkipChip(skip))}
-              </div>`}
-        </section>
+          <aside class="side-col">
+            <section class="skip-section">
+              <h2>Tonight's Skips</h2>
+              ${model.tonightSkips.length === 0
+                ? html`<p class="muted">Nothing skipped tonight.</p>`
+                : html`<div class="chip-row">
+                    ${model.tonightSkips.map((skip) => this._renderSkipChip(skip))}
+                  </div>`}
+            </section>
 
-        <details
-          class="collapsible-section"
-          ?open=${this._controlsOpen}
-          @toggle=${(e: Event) => (this._controlsOpen = (e.target as HTMLDetailsElement).open)}
-        >
-          <summary>Controls</summary>
-          <div class="controls-bar">
-            <button
-              class="control-btn"
-              ?disabled=${!model.globals.saluteEntityId}
-              @click=${() => this._pressButton(model.globals.saluteEntityId)}
+            <details
+              class="collapsible-section"
+              ?open=${this._controlsOpen}
+              @toggle=${(e: Event) => (this._controlsOpen = (e.target as HTMLDetailsElement).open)}
             >
-              ${model.globals.saluteRunning ? "Cancel Salute" : "21 Gun Salute"}
-            </button>
-            <button
-              class="control-btn"
-              ?disabled=${!model.globals.catchUpEntityId}
-              @click=${() => this._pressButton(model.globals.catchUpEntityId)}
-            >
-              Catch Up / Sync
-            </button>
-            <button
-              class="control-btn"
-              ?disabled=${!model.globals.stopEntityId}
-              @click=${() => this._pressButton(model.globals.stopEntityId)}
-            >
-              Stop
-            </button>
-          </div>
-        </details>
+              <summary>Controls</summary>
+              <div class="controls-bar">
+                <button
+                  class="control-btn"
+                  ?disabled=${!model.globals.saluteEntityId}
+                  @click=${() => this._pressButton(model.globals.saluteEntityId)}
+                >
+                  ${model.globals.saluteRunning ? "Cancel Salute" : "21 Gun Salute"}
+                </button>
+                <button
+                  class="control-btn"
+                  ?disabled=${!model.globals.catchUpEntityId}
+                  @click=${() => this._pressButton(model.globals.catchUpEntityId)}
+                >
+                  Catch Up / Sync
+                </button>
+                <button
+                  class="control-btn"
+                  ?disabled=${!model.globals.stopEntityId}
+                  @click=${() => this._pressButton(model.globals.stopEntityId)}
+                >
+                  Stop
+                </button>
+              </div>
+            </details>
 
-        <details
-          class="collapsible-section"
-          ?open=${this._manageSkipsOpen}
-          @toggle=${(e: Event) => (this._manageSkipsOpen = (e.target as HTMLDetailsElement).open)}
-        >
-          <summary>Manage Skips (${model.permanentSkips.length} events)</summary>
-          <input
-            type="search"
-            placeholder="Filter events..."
-            .value=${this._skipFilter}
-            @input=${(e: Event) => (this._skipFilter = (e.target as HTMLInputElement).value)}
-          />
-          <div class="chip-row">
-            ${model.permanentSkips
-              .filter((skip) =>
-                skip.eventName.toLowerCase().includes(this._skipFilter.toLowerCase()),
-              )
-              .map((skip) => this._renderSkipChip(skip))}
-          </div>
-        </details>
+            <details
+              class="collapsible-section"
+              ?open=${this._manageSkipsOpen}
+              @toggle=${(e: Event) => (this._manageSkipsOpen = (e.target as HTMLDetailsElement).open)}
+            >
+              <summary>Manage Skips (${model.permanentSkips.length} events)</summary>
+              <input
+                type="search"
+                placeholder="Filter events..."
+                .value=${this._skipFilter}
+                @input=${(e: Event) => (this._skipFilter = (e.target as HTMLInputElement).value)}
+              />
+              <div class="chip-row">
+                ${model.permanentSkips
+                  .filter((skip) =>
+                    skip.eventName.toLowerCase().includes(this._skipFilter.toLowerCase()),
+                  )
+                  .map((skip) => this._renderSkipChip(skip))}
+              </div>
+            </details>
+          </aside>
+        </div>
       </div>
     `;
   }
@@ -198,23 +195,57 @@ export class ChromaCalPanel extends LitElement {
     `;
   }
 
+  /** Orb style: an *active* color (a real segment color) always wins and
+   * is rendered as-is -- that's live data, not decoration. With no active
+   * color, the orb falls back to a neutral fill with a themed ring driven
+   * by --cc-accent (HA's --primary-color by default), never a hardcoded
+   * hue -- see the Phase 7 plan discussion for why that split matters. */
+  private _renderOrb(light: LightCardModel, size: "full" | "compact") {
+    const activeColor = light.currentColors[0];
+    const spinning = light.currentColors.length >= SPINNING_COLOR_THRESHOLD;
+    // Highlight opacity and glow alpha/blur values are pulled directly from
+    // v1's own setOrb() (dist/chromacal.html), scaled down from its 84px
+    // orb to this component's 64px/32px sizes -- real rendered ground
+    // truth, not a guessed approximation.
+    const style = activeColor
+      ? `background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.45) 0%, ${activeColor} 45%, rgba(0,0,0,.5) 100%); box-shadow: 0 0 ${
+          size === "full" ? "24px" : "12px"
+        } ${hexToRgba(activeColor, 0.627)}, 0 0 ${size === "full" ? "46px" : "23px"} ${hexToRgba(
+          activeColor,
+          0.208,
+        )};`
+      : "";
+    return html`<div class="orb ${size} ${spinning ? "spinning" : ""}" style=${style}></div>`;
+  }
+
   private _renderLightCard(light: LightCardModel) {
     if (this.narrow) {
       return html`
         <div class="light-card compact">
-          <span class="light-name">${light.lightName}</span>
-          <span class="event-name">${light.currentEventName ?? "—"}</span>
-          ${light.currentColors[0]
-            ? html`<span class="swatch" style="background:${light.currentColors[0]}"></span>`
-            : nothing}
+          ${this._renderOrb(light, "compact")}
+          <div class="compact-info">
+            <span class="light-name-eyebrow">${light.lightName}</span>
+            <span class="event-name-headline compact">${light.currentEventName ?? "—"}</span>
+          </div>
         </div>
       `;
     }
 
+    const marks = buildTimelineMarks(light, new Date().getHours() + new Date().getMinutes() / 60);
+
     return html`
       <div class="light-card">
-        <div class="light-card-header">
-          <span class="light-name">${light.lightName}</span>
+        <div class="card-top">
+          ${this._renderOrb(light, "full")}
+          <div class="card-info">
+            <span class="light-name-eyebrow">${light.lightName}</span>
+            <span class="event-name-headline">${light.currentEventName ?? "No active event"}</span>
+            ${light.currentStart && light.currentEnd
+              ? html`<span class="event-time-range"
+                  >${light.currentStart}&ndash;${light.currentEnd}</span
+                >`
+              : nothing}
+          </div>
           ${light.forceWhiteEntityId
             ? html`<button
                 class="force-white-btn"
@@ -224,29 +255,34 @@ export class ChromaCalPanel extends LitElement {
               </button>`
             : nothing}
         </div>
-        <div class="current-event">
-          ${light.currentColors[0]
-            ? html`<span class="swatch" style="background:${light.currentColors[0]}"></span>`
-            : nothing}
-          <span class="event-name">${light.currentEventName ?? "No active event"}</span>
-          ${light.currentStart && light.currentEnd
-            ? html`<span class="muted"
-                >${light.currentStart}&ndash;${light.currentEnd}</span
-              >`
-            : nothing}
-        </div>
         ${light.segments.length > 0
-          ? html`<div class="timeline">
-              ${light.segments.map((segment) => {
-                const { leftPct, widthPct } = segmentPosition(segment.startTime, segment.endTime);
-                const isCurrent = segment.name === light.currentEventName;
-                return html`<div
-                  class="timeline-seg ${isCurrent ? "current" : ""}"
-                  style="left:${leftPct}%; width:${widthPct}%; background:${segment.colors[0] ??
-                  "var(--cc-s2)"}"
-                  title="${segment.name} (${segment.startTime}–${segment.endTime})"
-                ></div>`;
-              })}
+          ? html`<div class="timeline-wrapper">
+              <div class="timeline">
+                ${light.segments.map((segment) => {
+                  const { leftPct, widthPct } = segmentPosition(segment.startTime, segment.endTime);
+                  const isCurrent = segment.name === light.currentEventName;
+                  return html`<div
+                    class="timeline-seg ${isCurrent ? "current" : ""}"
+                    style="left:${leftPct}%; width:${widthPct}%; background:${segment.colors[0] ??
+                    "var(--cc-s2)"}"
+                    title="${segment.name} (${segment.startTime}–${segment.endTime})"
+                  ></div>`;
+                })}
+              </div>
+              <div class="timeline-marks">
+                ${marks.map(
+                  (mark) => html`
+                    <div class="tl-mark" style="left:${mark.leftPct}%">
+                      <div class="tl-mark-line"></div>
+                      ${!mark.bare
+                        ? html`<span class="tl-mark-lbl ${mark.emphasize ? "hl" : ""}"
+                              >${mark.label}</span
+                            ><span class="tl-mark-lbl ${mark.emphasize ? "hl" : ""}">${mark.time}</span>`
+                        : nothing}
+                    </div>
+                  `,
+                )}
+              </div>
             </div>`
           : nothing}
       </div>
@@ -339,6 +375,28 @@ export class ChromaCalPanel extends LitElement {
         font-size: 13px;
       }
 
+      /* ── Page composition: main content wide/left, secondary controls
+         narrow/right -- the same "primary destination first" tiering the
+         backend design already follows, reinforced spatially here. ── */
+      .page-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .page-grid.narrow {
+        grid-template-columns: 1fr;
+      }
+
+      .main-col {
+        min-width: 0;
+      }
+
+      .side-col {
+        min-width: 0;
+      }
+
       .controls-bar {
         display: flex;
         flex-wrap: wrap;
@@ -378,9 +436,14 @@ export class ChromaCalPanel extends LitElement {
 
       .light-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: 12px;
-        margin-bottom: 24px;
+        /* auto-fit, not auto-fill: auto-fill reserves a full track's worth
+           of width for every track the container COULD hold, even ones
+           with no card in them, leaving real cards squeezed into a
+           fraction of the row with dead space beside them. auto-fit
+           collapses those empty tracks so populated ones actually expand
+           to fill the row. */
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 14px;
       }
 
       .light-grid.narrow {
@@ -391,29 +454,69 @@ export class ChromaCalPanel extends LitElement {
         background: var(--cc-s1);
         border: 1px solid var(--cc-border);
         border-radius: var(--cc-radius);
-        padding: 14px;
+        padding: 16px;
       }
 
       .light-card.compact {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
         padding: 10px 14px;
       }
 
-      .light-card-header {
+      .card-top {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 8px;
+        gap: 16px;
+        margin-bottom: 14px;
       }
 
-      .light-name {
-        font-weight: 600;
-      }
-
-      .compact .light-name {
+      .card-info {
         flex: 1;
+        min-width: 0;
+      }
+
+      .compact-info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Hierarchy: the light's own name is the quiet label; the current
+         event is the loud headline -- inverted from the original layout,
+         which had it backwards. ── */
+      .light-name-eyebrow {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--cc-muted);
+        margin-bottom: 4px;
+      }
+
+      .event-name-headline {
+        display: block;
+        font-size: 19px;
+        font-weight: 700;
+        color: var(--cc-accent);
+        text-shadow: 0 0 12px color-mix(in srgb, var(--cc-accent) 45%, transparent);
+        line-height: 1.25;
+        /* Never truncate -- this is the single most important text on the
+           card, so it wraps onto a second line instead of clipping. */
+        white-space: normal;
+        overflow-wrap: break-word;
+      }
+
+      .event-name-headline.compact {
+        font-size: 15px;
+      }
+
+      .event-time-range {
+        display: block;
+        color: var(--cc-muted);
+        font-size: 12px;
+        margin-top: 4px;
       }
 
       .force-white-btn {
@@ -425,6 +528,8 @@ export class ChromaCalPanel extends LitElement {
         font-size: 12px;
         cursor: pointer;
         font-family: inherit;
+        align-self: flex-start;
+        flex-shrink: 0;
       }
 
       .force-white-btn:hover {
@@ -432,30 +537,53 @@ export class ChromaCalPanel extends LitElement {
         color: var(--cc-accent);
       }
 
-      .current-event {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 10px;
-      }
-
-      .swatch {
-        width: 14px;
-        height: 14px;
+      /* ── Signature orb -- see _renderOrb()'s comment for the real-color-
+         vs-themed-idle-glow split. ── */
+      .orb {
         border-radius: 50%;
-        border: 1px solid var(--cc-border);
+        background: var(--cc-s2);
         flex-shrink: 0;
+        transition: background 0.8s, box-shadow 0.8s;
+        box-shadow: 0 0 0 2px var(--cc-accent) inset;
       }
 
-      .event-name {
-        font-size: 14px;
+      .orb.full {
+        width: 64px;
+        height: 64px;
+      }
+
+      .orb.compact {
+        width: 32px;
+        height: 32px;
+        box-shadow: 0 0 0 1.5px var(--cc-accent) inset;
+      }
+
+      .orb.spinning {
+        animation: orb-pulse 3s ease-in-out infinite alternate;
+      }
+
+      @keyframes orb-pulse {
+        from {
+          filter: brightness(1);
+        }
+        to {
+          filter: brightness(1.3);
+        }
+      }
+
+      .timeline-wrapper {
+        position: relative;
+        padding-bottom: 34px;
       }
 
       .timeline {
+        /* Height/radius scaled up from an earlier 10px pass to match v1's
+           actual rendered bar (dist/chromacal.html's #phase-rows), which
+           reads as noticeably more present/legible at this size. */
         position: relative;
-        height: 10px;
+        height: 16px;
         background: var(--cc-s2);
-        border-radius: 5px;
+        border-radius: 8px;
         overflow: hidden;
       }
 
@@ -469,6 +597,40 @@ export class ChromaCalPanel extends LitElement {
       .timeline-seg.current {
         opacity: 1;
         box-shadow: 0 0 0 1px var(--cc-accent) inset;
+      }
+
+      .timeline-marks {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 20px;
+      }
+
+      .tl-mark {
+        position: absolute;
+        transform: translateX(-50%);
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .tl-mark-line {
+        width: 1.5px;
+        height: 7px;
+        background: var(--cc-border);
+        margin: 0 auto 4px;
+      }
+
+      .tl-mark-lbl {
+        font-size: 10px;
+        color: var(--cc-muted);
+        line-height: 1.4;
+        display: block;
+      }
+
+      .tl-mark-lbl.hl {
+        color: var(--cc-text);
+        font-weight: 700;
+        font-size: 11px;
       }
 
       .skip-section {
