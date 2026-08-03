@@ -191,6 +191,30 @@ in the meantime; they catch different classes of bug (see the truncation/
 dead-space fixes in Phase 7, both invisible to DOM math until a real
 screenshot showed them).
 
+## Disposable-container gotcha — "hung" HA may just be waiting on onboarding
+
+Symptom: a fresh disposable HA container logs its earliest startup lines
+(the "custom integration ... not tested" loader warning, maybe a `rich`
+SyntaxWarning) and then goes completely idle -- 0% CPU, no further log
+output, no errors, seemingly forever. Every diagnostic points to a real
+hang: the process is alive but blocked in `do_epoll_wait` with nothing
+scheduled, disk/memory/DNS all check out fine, and it reproduces even on a
+completely bare `home-assistant` image with zero bind mounts or
+customization.
+
+It isn't a hang. A never-onboarded HA instance stops at onboarding's
+location-picker step, which needs a human to actually click/set a
+location in the browser -- there's no further log output because HA is
+correctly waiting on user input, not stuck. Confirmed in Phase 7 after a
+long, thorough (and ultimately unnecessary) investigation that ruled out
+Docker Desktop, host resources, and the container's own code before the
+real cause turned up: nobody had completed onboarding on that instance.
+
+Check this FIRST, before concluding a Docker/host-level fault: open the
+container's URL in a browser and see whether it's actually sitting on the
+onboarding flow. Only chase infrastructure theories once onboarding is
+confirmed complete and the hang persists.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
