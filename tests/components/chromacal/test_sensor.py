@@ -81,3 +81,76 @@ async def test_sensor_falls_back_gracefully_without_sun_entity(hass):
     state = hass.states.get(entity_id)
     assert state is not None
     assert state.state not in (None, "unknown", "unavailable")
+
+
+# ── Upcoming Events (global, not per-light) ──────────────────────────────
+
+
+async def test_upcoming_events_sensor_created_once_not_per_light(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, entry_id="test_upcoming")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "test_upcoming_upcoming_events")
+    assert entity_id is not None
+    # Not entity-per-light: only one Upcoming Events sensor exists even
+    # though ENTRY_DATA configures one light -- confirmed by construction
+    # (unique_id has no light_entity segment), asserted here as behavior.
+    assert (
+        registry.async_get_entity_id(
+            "sensor", DOMAIN, "test_upcoming_light.front_porch_upcoming_events"
+        )
+        is None
+    )
+
+
+async def test_upcoming_events_sensor_lists_independence_day(hass, freezer):
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, entry_id="test_upcoming_list")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "test_upcoming_list_upcoming_events")
+    state = hass.states.get(entity_id)
+    assert state is not None
+
+    assert state.attributes["role"] == "upcoming_events"
+    events = state.attributes["events"]
+    assert len(events) >= 1
+
+    july4 = next(e for e in events if e["name"] == "Independence Day")
+    assert july4["date"] == "2026-07-04"
+    assert july4["is_today"] is True
+    assert july4["category"] == "federal"
+    assert "colors" in july4 and isinstance(july4["colors"], list)
+
+    # Native value: the nearest event's name -- today's, since it's first.
+    assert state.state == events[0]["name"]
+
+
+async def test_upcoming_events_sensor_updates_when_a_permanent_skip_is_set(hass, freezer):
+    """Not filtered by skip status -- matches get_upcoming_events()'s own
+    contract (an already-skipped event must still appear so there's
+    something to build an un-skip control from)."""
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, entry_id="test_upcoming_skip")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    await coordinator.async_set_permanent_skip("Independence Day", True)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "test_upcoming_skip_upcoming_events")
+    events = hass.states.get(entity_id).attributes["events"]
+    assert any(e["name"] == "Independence Day" for e in events)

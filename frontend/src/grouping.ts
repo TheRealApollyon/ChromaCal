@@ -64,6 +64,36 @@ export interface SkipModel {
   isOn: boolean;
 }
 
+export interface UpcomingEventModel {
+  date: string;
+  name: string;
+  category: string;
+  eventType: string;
+  icon: string;
+  colors: string[];
+  isToday: boolean;
+  isPersonalRange: boolean;
+  permanentSkip: SkipModel | null;
+  /** Only set for today's events with a real tonight-skip switch --
+   * "tonight" has no meaning for a future date, same restriction the
+   * backend itself already enforces (tonight-skip switches only exist
+   * for today's candidates). */
+  tonightSkip: SkipModel | null;
+}
+
+/** The wire shape of one entry in the Upcoming Events sensor's `events`
+ * attribute -- see sensor.py's ChromaCalUpcomingEventsSensor. */
+interface RawUpcomingEvent {
+  date: string;
+  name: string;
+  category: string;
+  event_type: string;
+  icon: string;
+  colors: string[];
+  is_today: boolean;
+  is_personal_range: boolean;
+}
+
 export interface GlobalControlsModel {
   saluteEntityId: string | null;
   saluteRunning: boolean;
@@ -78,6 +108,7 @@ export interface PanelViewModel {
   lights: LightCardModel[];
   tonightSkips: SkipModel[];
   permanentSkips: SkipModel[];
+  upcomingEvents: UpcomingEventModel[];
 }
 
 function ownEntityIds(hass: HomeAssistant): string[] {
@@ -106,6 +137,7 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
   const forceWhiteByLight = new Map<string, string>();
   const tonightSkips: SkipModel[] = [];
   const permanentSkips: SkipModel[] = [];
+  let upcomingEventsEntityId: string | null = null;
 
   for (const entityId of ids) {
     const state = hass.states[entityId];
@@ -145,8 +177,12 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
       continue;
     }
 
-    if (domain === "sensor" && typeof attrs.light_entity === "string") {
-      scheduleByLight.set(attrs.light_entity, entityId);
+    if (domain === "sensor") {
+      if (attrs.role === "upcoming_events") {
+        upcomingEventsEntityId = entityId;
+      } else if (typeof attrs.light_entity === "string") {
+        scheduleByLight.set(attrs.light_entity, entityId);
+      }
     }
   }
 
@@ -179,5 +215,22 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
   tonightSkips.sort((a, b) => a.eventName.localeCompare(b.eventName));
   permanentSkips.sort((a, b) => a.eventName.localeCompare(b.eventName));
 
-  return { globals, lights, tonightSkips, permanentSkips };
+  const permanentSkipByName = new Map(permanentSkips.map((s) => [s.eventName, s]));
+  const tonightSkipByName = new Map(tonightSkips.map((s) => [s.eventName, s]));
+  const upcomingState = upcomingEventsEntityId ? hass.states[upcomingEventsEntityId] : undefined;
+  const rawEvents = (upcomingState?.attributes.events as RawUpcomingEvent[] | undefined) ?? [];
+  const upcomingEvents: UpcomingEventModel[] = rawEvents.map((e) => ({
+    date: e.date,
+    name: e.name,
+    category: e.category,
+    eventType: e.event_type,
+    icon: e.icon,
+    colors: e.colors,
+    isToday: e.is_today,
+    isPersonalRange: e.is_personal_range,
+    permanentSkip: permanentSkipByName.get(e.name) ?? null,
+    tonightSkip: e.is_today ? (tonightSkipByName.get(e.name) ?? null) : null,
+  }));
+
+  return { globals, lights, tonightSkips, permanentSkips, upcomingEvents };
 }

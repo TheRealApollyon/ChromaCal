@@ -74,10 +74,11 @@ from .scheduling.engine import (
     get_desired_fire_key,
     get_enabled_holidays,
     get_night_segments,
+    get_upcoming_events,
     resolve_cfg_end_hour,
 )
 from .scheduling.fire import FireCommand, build_fire_command
-from .scheduling.models import NightSegment
+from .scheduling.models import NightSegment, UpcomingEvent
 from .scheduling.sunset import resolve_sunset_hour
 
 # Desired-fire-keys that mean "do nothing" -- an existing sunset/sunrise
@@ -194,6 +195,12 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # tonight-skip switches (see switch.py). Recomputed alongside the
         # tonight_skips reset above, same date guard.
         self.todays_candidate_names: set[str] = set()
+        # The next 45 days of enabled events, for the Upcoming Events
+        # sensor -- recomputed every refresh alongside everything else
+        # below, not date-guarded like todays_candidate_names, since it's
+        # cheap and a category/skip change should show up immediately
+        # rather than waiting for local midnight.
+        self.upcoming_events: list[UpcomingEvent] = []
         # Manual override: suppresses auto-fire and the color-cycle recheck
         # for a light, ported from v1's _schedOverride. See ManualOverride
         # for the source/expiry shape. In-memory only, like tonight_skips
@@ -367,6 +374,11 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             tonight_skips=frozenset(self.tonight_skips),
         )
         holidays = get_enabled_holidays(config, now.year)
+        # personal_events intentionally omitted -- no config flow surface
+        # collects them yet (see fire.py's lighting-style docstring for the
+        # same reasoning applied elsewhere); pass real ones through here
+        # once that surface exists.
+        self.upcoming_events = get_upcoming_events(now, holidays)
 
         result: dict[str, LightSchedule] = {}
         for light_data in self.lights:

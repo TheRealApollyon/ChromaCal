@@ -16,6 +16,7 @@ from scheduling.engine import (
     get_desired_fire_key,
     get_enabled_holidays,
     get_night_segments,
+    get_upcoming_events,
     resolve_cfg_end_hour,
     resolve_tier_winner,
 )
@@ -360,3 +361,99 @@ def test_all_event_names_deduplicates_and_sorts():
     duplicate = HolidayEvent(1, 1, 1, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")
     names = all_event_names([SACRED_EVENT, VIGIL_EVENT, HOLIDAY_EVENT, duplicate])
     assert names == sorted({"USMC Birthday", "Some Vigil", "Some Holiday"})
+
+
+# ── get_upcoming_events ───────────────────────────────────────────────────────
+
+SINGLE_DAY_TODAY = HolidayEvent(7, 4, 4, "Independence Day", "federal", "🎆", ("#DC143C",), "holiday")
+SINGLE_DAY_FUTURE = HolidayEvent(7, 20, 20, "Some Future Day", "federal", "🎉", ("#000000",), "holiday")
+MULTI_DAY_FUTURE_START = HolidayEvent(8, 1, 31, "Some Awareness Month", "awareness", "💙", ("#000000",), "awareness")
+MULTI_DAY_IN_PROGRESS = HolidayEvent(7, 1, 10, "Mid-Range Month", "awareness", "💚", ("#000000",), "awareness")
+OUTSIDE_WINDOW = HolidayEvent(9, 1, 1, "Too Far Out", "federal", "🎈", ("#000000",), "holiday")
+
+
+def test_today_event_is_included_and_flagged_is_today():
+    events = get_upcoming_events(datetime(2026, 7, 4), [SINGLE_DAY_TODAY])
+    assert len(events) == 1
+    assert events[0].name == "Independence Day"
+    assert events[0].date == datetime(2026, 7, 4).date()
+    assert events[0].is_today is True
+
+
+def test_future_single_day_event_included_not_flagged_today():
+    events = get_upcoming_events(datetime(2026, 7, 4), [SINGLE_DAY_FUTURE])
+    assert len(events) == 1
+    assert events[0].date == datetime(2026, 7, 20).date()
+    assert events[0].is_today is False
+
+
+def test_event_beyond_the_window_is_excluded():
+    events = get_upcoming_events(datetime(2026, 7, 4), [OUTSIDE_WINDOW], days=45)
+    assert events == []
+
+
+def test_event_exactly_at_the_window_boundary_is_included():
+    # July 4 + 45 days = August 18 -- inclusive boundary (v1's `i <= days`).
+    boundary_event = HolidayEvent(8, 18, 18, "Boundary Day", "federal", "🎯", ("#000000",), "holiday")
+    events = get_upcoming_events(datetime(2026, 7, 4), [boundary_event], days=45)
+    assert len(events) == 1
+    assert events[0].date == datetime(2026, 8, 18).date()
+
+
+def test_multi_day_event_starting_in_the_future_appears_once_on_its_start_day():
+    events = get_upcoming_events(datetime(2026, 7, 4), [MULTI_DAY_FUTURE_START])
+    assert len(events) == 1
+    assert events[0].date == datetime(2026, 8, 1).date()
+
+
+def test_multi_day_event_already_in_progress_today_still_shows_today():
+    # Real v1 quirk: today (July 4) falls mid-range (July 1-10), not on the
+    # start day -- still included today rather than silently disappearing.
+    events = get_upcoming_events(datetime(2026, 7, 4), [MULTI_DAY_IN_PROGRESS])
+    assert len(events) == 1
+    assert events[0].date == datetime(2026, 7, 4).date()
+    assert events[0].is_today is True
+
+
+def test_personal_single_day_event_behaves_like_a_normal_event():
+    personal = PersonalEvent(month=7, day=4, name="Birthday", colors=("#FFC0CB",))
+    events = get_upcoming_events(datetime(2026, 7, 4), [], personal_events=(personal,))
+    assert len(events) == 1
+    assert events[0].category == "personal"
+    assert events[0].icon == "🎂"
+    assert events[0].is_personal_range is False
+
+
+def test_personal_range_event_appears_once_per_night_not_deduplicated():
+    personal = PersonalEvent(month=7, day=4, day_end=6, name="Anniversary Trip", colors=("#FF00FF",))
+    events = get_upcoming_events(datetime(2026, 7, 4), [], personal_events=(personal,))
+    dates = sorted(e.date for e in events)
+    assert dates == [datetime(2026, 7, d).date() for d in (4, 5, 6)]
+    assert all(e.is_personal_range for e in events)
+
+
+def test_upcoming_events_does_not_filter_by_skip_status():
+    # No skip parameter exists on this function at all, by construction --
+    # same contract as get_candidates_for_date, confirmed the same way.
+    events = get_upcoming_events(datetime(2026, 7, 4), [SINGLE_DAY_TODAY])
+    assert len(events) == 1
+
+
+def test_upcoming_events_dedup_keeps_only_the_first_future_occurrence():
+    first = HolidayEvent(7, 20, 20, "Duplicate Name", "federal", "🎆", ("#000000",), "holiday")
+    second = HolidayEvent(7, 25, 25, "Duplicate Name", "federal", "🎆", ("#000000",), "holiday")
+    events = get_upcoming_events(datetime(2026, 7, 4), [first, second])
+    assert len(events) == 1
+    assert events[0].date == datetime(2026, 7, 20).date()
+
+
+def test_upcoming_events_dedup_does_not_apply_across_two_today_occurrences():
+    # Real v1 quirk, ported faithfully rather than "fixed": the dedup guard
+    # is `seen.has(key) && !e.isToday` -- it only drops a duplicate that
+    # ISN'T today, so two same-named entries that both land on today both
+    # survive. Doesn't come up with real calendar data (no two enabled
+    # entries share a name), but this locks in that the port matches v1's
+    # actual behavior rather than a "cleaner" dedup nobody asked for.
+    duplicate = HolidayEvent(7, 4, 4, "Independence Day", "federal", "🎆", ("#DC143C",), "holiday")
+    events = get_upcoming_events(datetime(2026, 7, 4), [SINGLE_DAY_TODAY, duplicate])
+    assert len(events) == 2

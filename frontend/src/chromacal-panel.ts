@@ -2,7 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { HomeAssistant, PanelInfo } from "./types";
-import { buildViewModel, type LightCardModel, type SkipModel } from "./grouping";
+import { buildViewModel, type LightCardModel, type SkipModel, type UpcomingEventModel } from "./grouping";
 import { nativeThemeVars, presetThemeVars, PRESET_IDS, PRESET_LABELS, type PresetId } from "./theme";
 import { buildTimelineMarks, segmentPosition } from "./timeline";
 
@@ -114,6 +114,15 @@ export class ChromaCalPanel extends LitElement {
               : html`<section class="light-grid ${this.narrow ? "narrow" : ""}">
                   ${model.lights.map((light) => this._renderLightCard(light))}
                 </section>`}
+
+            <section class="upcoming-section">
+              <h2>Upcoming Events</h2>
+              ${model.upcomingEvents.length === 0
+                ? html`<p class="muted">No events in the next 45 days for your selected categories.</p>`
+                : html`<div class="upcoming-list">
+                    ${model.upcomingEvents.map((event) => this._renderUpcomingRow(event))}
+                  </div>`}
+            </section>
           </main>
 
           <aside class="side-col">
@@ -179,6 +188,69 @@ export class ChromaCalPanel extends LitElement {
             </details>
           </aside>
         </div>
+      </div>
+    `;
+  }
+
+  private _formatEventDate(isoDate: string): string {
+    // "T00:00:00" avoids the UTC-midnight-rolls-back-a-day trap of parsing
+    // a bare YYYY-MM-DD string, which JS treats as UTC while
+    // toLocaleDateString renders in the browser's local zone.
+    return new Date(`${isoDate}T00:00:00`).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  private _renderUpcomingRow(event: UpcomingEventModel) {
+    const permSkip = event.permanentSkip;
+    const nightSkip = event.tonightSkip;
+    return html`
+      <div class="upcoming-row ${event.isToday ? "today" : ""} ${permSkip?.isOn ? "skipped" : ""}">
+        <span class="up-date">${event.isToday ? "TODAY" : this._formatEventDate(event.date)}</span>
+        <span class="up-icon">${event.icon}</span>
+        <span class="up-name">${event.name}</span>
+        <span class="up-badge">${event.category}</span>
+        <span class="up-chips">
+          ${event.colors.map((c) => html`<span class="up-chip" style="background:${c}"></span>`)}
+        </span>
+        <button
+          class="up-action-btn"
+          disabled
+          title="Tonight's Pick -- not wired up yet, coming in a follow-up"
+        >
+          ☆
+        </button>
+        <button
+          class="up-action-btn"
+          disabled
+          title="Customize colors -- not wired up yet, coming in a follow-up"
+        >
+          🎨
+        </button>
+        ${nightSkip
+          ? html`<button
+              class="up-action-btn ${nightSkip.isOn ? "active" : ""}"
+              @click=${() => this._toggleSwitch(nightSkip.entityId, nightSkip.isOn)}
+              title=${nightSkip.isOn
+                ? "Skipped tonight -- click to restore"
+                : "Skip for tonight only (resets at midnight)"}
+            >
+              🌙
+            </button>`
+          : nothing}
+        ${permSkip
+          ? html`<button
+              class="up-action-btn ${permSkip.isOn ? "active" : ""}"
+              @click=${() => this._toggleSwitch(permSkip.entityId, permSkip.isOn)}
+              title=${permSkip.isOn
+                ? "Re-enable -- this event will run again"
+                : "Permanently skip this event"}
+            >
+              ${permSkip.isOn ? "⊘" : "○"}
+            </button>`
+          : nothing}
       </div>
     `;
   }
@@ -631,6 +703,114 @@ export class ChromaCalPanel extends LitElement {
         color: var(--cc-text);
         font-weight: 700;
         font-size: 11px;
+      }
+
+      .upcoming-section {
+        margin-top: 20px;
+      }
+
+      .upcoming-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        background: var(--cc-border);
+        border: 1px solid var(--cc-border);
+        border-radius: var(--cc-radius);
+        overflow: hidden;
+      }
+
+      .upcoming-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: var(--cc-s1);
+        font-size: 13px;
+      }
+
+      .upcoming-row.today {
+        background: var(--cc-s2);
+      }
+
+      .upcoming-row.skipped {
+        opacity: 0.5;
+      }
+
+      .up-date {
+        width: 78px;
+        flex-shrink: 0;
+        color: var(--cc-muted);
+        font-size: 12px;
+      }
+
+      .upcoming-row.today .up-date {
+        color: var(--cc-accent);
+        font-weight: 700;
+      }
+
+      .up-icon {
+        flex-shrink: 0;
+      }
+
+      .up-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .up-badge {
+        flex-shrink: 0;
+        background: var(--cc-s2);
+        color: var(--cc-muted);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .up-chips {
+        display: flex;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+
+      .up-chip {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 1px solid var(--cc-border);
+      }
+
+      .up-action-btn {
+        flex-shrink: 0;
+        background: none;
+        border: 1px solid var(--cc-border);
+        border-radius: 6px;
+        width: 26px;
+        height: 26px;
+        color: var(--cc-muted);
+        cursor: pointer;
+        font-size: 13px;
+        line-height: 1;
+      }
+
+      .up-action-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .up-action-btn:hover:not(:disabled) {
+        border-color: var(--cc-accent);
+        color: var(--cc-accent);
+      }
+
+      .up-action-btn.active {
+        background: var(--cc-accent2);
+        color: var(--cc-s1);
+        border-color: var(--cc-accent2);
       }
 
       .skip-section {

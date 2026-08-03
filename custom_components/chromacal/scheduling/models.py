@@ -8,6 +8,7 @@ behavior change, since these are pure data carriers.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(frozen=True)
@@ -53,3 +54,24 @@ class NightSegment:
     end_hour: float
     is_sacred: bool = False
     is_pick: bool = False
+
+
+@dataclass(frozen=True)
+class UpcomingEvent:
+    """One occurrence of an enabled holiday or personal event landing within
+    the Upcoming Events window -- see engine.py's get_upcoming_events().
+
+    Not filtered by skip state -- same reasoning as get_candidates_for_date:
+    an already-skipped event still needs to appear so there's something to
+    build an un-skip control from. Skip status is a display/action concern
+    for whatever renders this list, not something baked into the list itself.
+    """
+
+    date: date
+    name: str
+    category: str
+    event_type: str
+    icon: str
+    colors: tuple[str, ...]
+    is_today: bool
+    is_personal_range: bool = False

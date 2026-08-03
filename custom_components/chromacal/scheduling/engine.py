@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from dataclasses import replace as dc_replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .calendars import GLOBAL_FLOATING, REGION_CALENDARS, US_HOLIDAYS
 from .dates import build_floating_dates, get_pagan_solstice_events
-from .models import HolidayEvent, NightSegment, SegmentEvent
+from .models import HolidayEvent, NightSegment, SegmentEvent, UpcomingEvent
 
 _PERSONAL_ICONS = {
     "tribute": "🎖️",
@@ -124,6 +124,108 @@ def all_event_names(holidays: list[HolidayEvent]) -> list[str]:
     scoped to any particular date.
     """
     return sorted({h.name for h in holidays})
+
+
+@dataclass(frozen=True)
+class _UpcomingCandidate:
+    """Internal unification of HolidayEvent and PersonalEvent -- v1's
+    getUpcomingEvents() builds one throwaway ad-hoc object shape for both;
+    this is the same idea with real field names, not a public type."""
+
+    month: int
+    day_start: int
+    day_end: int
+    name: str
+    category: str
+    event_type: str
+    icon: str
+    colors: tuple[str, ...]
+    is_personal_range: bool
+
+
+def get_upcoming_events(
+    now: datetime,
+    holidays: list[HolidayEvent],
+    personal_events: tuple[PersonalEvent, ...] = (),
+    days: int = 45,
+) -> list[UpcomingEvent]:
+    """Every enabled holiday/personal event landing in the next `days` days.
+
+    Ports getUpcomingEvents() from chromacal.html faithfully, including two
+    real quirks worth knowing rather than "fixing":
+
+    - A multi-day built-in event (e.g. Pride Month) appears once, on its
+      start day, not once per day of its range -- EXCEPT one already in
+      progress today, which still shows up today even though today isn't
+      its start day. Only *future* continuation days get skipped.
+    - A personal event with a real date range (day_end != day) is the one
+      exception to "once per event": every night in the range appears
+      individually, since the whole point of giving it a range is to let
+      the user skip or customize individual nights within it.
+
+    Like get_candidates_for_date, deliberately does NOT filter by skip
+    status -- see UpcomingEvent's own docstring for why.
+    """
+    candidates = [
+        _UpcomingCandidate(
+            month=h.month,
+            day_start=h.day_start,
+            day_end=h.day_end,
+            name=h.name,
+            category=h.category,
+            event_type=h.event_type,
+            icon=h.icon,
+            colors=h.colors,
+            is_personal_range=False,
+        )
+        for h in holidays
+    ] + [
+        _UpcomingCandidate(
+            month=p.month,
+            day_start=p.day,
+            day_end=p.day_end if p.day_end is not None else p.day,
+            name=p.name,
+            category="personal",
+            event_type=p.event_type,
+            icon=_PERSONAL_ICONS.get(p.event_type, "🎂"),
+            colors=p.colors,
+            is_personal_range=p.day_end is not None and p.day_end != p.day,
+        )
+        for p in personal_events
+    ]
+
+    today = now.date()
+    events: list[UpcomingEvent] = []
+    for i in range(days + 1):
+        d = today + timedelta(days=i)
+        for c in candidates:
+            if c.month != d.month or not (c.day_start <= d.day <= c.day_end):
+                continue
+            is_multi_day = c.day_start != c.day_end
+            if is_multi_day and d.day > c.day_start and i > 0 and not c.is_personal_range:
+                continue
+            events.append(
+                UpcomingEvent(
+                    date=d,
+                    name=c.name,
+                    category=c.category,
+                    event_type=c.event_type,
+                    icon=c.icon,
+                    colors=c.colors,
+                    is_today=(i == 0),
+                    is_personal_range=c.is_personal_range,
+                )
+            )
+
+    seen: set[str] = set()
+    result: list[UpcomingEvent] = []
+    for e in events:
+        key = f"{e.name}:{e.date.isoformat()}" if e.is_personal_range else e.name
+        if key in seen and not e.is_today:
+            continue
+        seen.add(key)
+        result.append(e)
+    return result
 
 
 def resolve_tier_winner(

@@ -22,12 +22,16 @@ async def async_setup_entry(
     entry: ConfigEntry[ChromaCalCoordinator],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up one schedule sensor per configured light."""
+    """Set up one schedule sensor per configured light, plus one global
+    Upcoming Events sensor (not per-light -- the list depends on region/
+    categories/personal events, none of which are light-specific)."""
     coordinator: ChromaCalCoordinator = entry.runtime_data
-    async_add_entities(
+    entities: list[SensorEntity] = [
         ChromaCalScheduleSensor(coordinator, entry.entry_id, light_entity)
         for light_entity in coordinator.data
-    )
+    ]
+    entities.append(ChromaCalUpcomingEventsSensor(coordinator, entry.entry_id))
+    async_add_entities(entities)
 
 
 def _format_hour(hour: float) -> str:
@@ -69,6 +73,11 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             return {}
 
         attrs: dict[str, Any] = {
+            # role lets the frontend panel tell this sensor apart from the
+            # global Upcoming Events sensor below by data, not by parsing
+            # display names -- same reasoning as switch.py/button.py's
+            # role/scope attributes.
+            "role": "schedule",
             "light_entity": schedule.light_entity,
             "sunset_hour": schedule.sunset_hour,
             "schedule_end_time": _format_hour(schedule.schedule_end_hour),
@@ -94,3 +103,49 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             attrs["end_time"] = _format_hour(current.end_hour)
 
         return attrs
+
+
+class ChromaCalUpcomingEventsSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEntity):
+    """The next 45 days of enabled holiday/personal events -- global, not
+    per-light, since the list depends only on region/categories/personal
+    events. Native value is the nearest event's name (something legible
+    at a glance in HA's own entity list); the full list lives in
+    extra_state_attributes for the panel's Upcoming Events card.
+
+    Not filtered by skip state, same as get_upcoming_events() itself --
+    the panel is responsible for showing skip status (via the existing
+    skip switches) and dimming skipped rows, not this sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Upcoming Events"
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator: ChromaCalCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_upcoming_events"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    @property
+    def native_value(self) -> str | None:
+        events = self.coordinator.upcoming_events
+        return events[0].name if events else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "role": "upcoming_events",
+            "events": [
+                {
+                    "date": event.date.isoformat(),
+                    "name": event.name,
+                    "category": event.category,
+                    "event_type": event.event_type,
+                    "icon": event.icon,
+                    "colors": list(event.colors),
+                    "is_today": event.is_today,
+                    "is_personal_range": event.is_personal_range,
+                }
+                for event in self.coordinator.upcoming_events
+            ],
+        }
