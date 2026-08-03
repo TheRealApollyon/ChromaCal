@@ -70,23 +70,38 @@ async def async_setup_entry(
     )
     async_add_entities([ChromaCalEmergencySwitch(coordinator, entry.entry_id)])
 
-    # Reconcile against whatever the entity registry already has for THIS
-    # entry, not an empty set -- otherwise a tonight-skip switch that was
-    # already stale before an HA restart (the day rolled over while HA was
-    # down, say) would never get cleaned up: this session's own diffing
-    # only ever sees names it added itself unless seeded from what's real.
+    # existing_tonight_names: whatever the entity registry already
+    # remembers for THIS entry, purely so a stale name from BEFORE this
+    # restart (no longer a candidate) still gets cleaned up even though
+    # this session never added it itself.
+    #
+    # known_tonight_names starts EMPTY, not seeded from the registry --
+    # real bug, caught live (2026-08-01, confirmed with a real HA
+    # restart + config-entry reload, not a hypothetical): a registry
+    # entry persists across restarts regardless of whether the entity is
+    # actually live, so seeding known_tonight_names from the registry
+    # made every *still-valid* candidate that happened to already have a
+    # registry entry look "already added" on the very first sync call --
+    # async_add_entities() then never got called for it, so it silently
+    # never came back after any same-day restart. async_add_entities()
+    # reattaching to a pre-existing registry unique_id is the normal,
+    # safe HA pattern (exactly what the static permanent-skip switches do
+    # unconditionally on every setup) -- the fix is calling it for every
+    # current candidate regardless of registry history, tracking "added
+    # this session" separately from "the registry has heard of this name."
     registry = er.async_get(hass)
-    known_tonight_names: set[str] = {
+    existing_tonight_names: set[str] = {
         reg_entry.unique_id[len(entry.entry_id) + len(_TONIGHT_PREFIX) :]
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
         if reg_entry.domain == Platform.SWITCH
         and reg_entry.unique_id.startswith(f"{entry.entry_id}{_TONIGHT_PREFIX}")
     }
+    known_tonight_names: set[str] = set()
 
     def _sync_tonight_switches() -> None:
         current = coordinator.todays_candidate_names
         new_names = current - known_tonight_names
-        stale_names = known_tonight_names - current
+        stale_names = (known_tonight_names | existing_tonight_names) - current
 
         if new_names:
             known_tonight_names.update(new_names)
@@ -97,6 +112,7 @@ async def async_setup_entry(
 
         for name in stale_names:
             known_tonight_names.discard(name)
+            existing_tonight_names.discard(name)
             entity_id = registry.async_get_entity_id(
                 Platform.SWITCH, DOMAIN, _tonight_unique_id(entry.entry_id, name)
             )

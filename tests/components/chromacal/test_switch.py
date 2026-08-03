@@ -146,6 +146,43 @@ async def test_tonight_skip_switch_only_exists_for_todays_candidates(hass, freez
     assert _tonight_id(registry, entry.entry_id, "Veterans Day") is None  # a different date
 
 
+async def test_tonight_skip_switch_survives_a_same_day_reload(hass, freezer):
+    """Real bug, caught live in the disposable container (2026-08-01, a
+    real HA restart + config-entry reload, not a hypothetical): a tonight-
+    skip switch's entity-registry entry persists across a reload/restart
+    regardless of whether the entity is currently live. The old seeding
+    logic treated "already in the registry" as "already added this
+    session," so a still-valid candidate that happened to already have a
+    registry entry from before the reload never got handed to
+    async_add_entities() again -- it silently never came back as a real
+    entity, even though the registry still remembered its entity_id.
+    """
+    freezer.move_to("2026-07-04 21:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_tonight_reload")
+
+    registry = er.async_get(hass)
+    entity_id = _tonight_id(registry, entry.entry_id, "Independence Day")
+    assert entity_id is not None
+    assert hass.states.get(entity_id) is not None  # live before the reload
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Same day, same candidate -- must come back as a real, live entity.
+    # The broken version doesn't make the entity vanish -- hass.states
+    # still returns something for it, just an "unavailable, restored=True"
+    # placeholder with none of the switch's own attributes, which reads as
+    # a broken entity in the HA UI rather than a cleanly-missing one. Check
+    # the actual state and a real attribute, not just "is this None".
+    entity_id_after = _tonight_id(registry, entry.entry_id, "Independence Day")
+    assert entity_id_after is not None
+    state_after = hass.states.get(entity_id_after)
+    assert state_after is not None
+    assert state_after.state != "unavailable"
+    assert state_after.attributes.get("event_name") == "Independence Day"
+
+
 async def test_tonight_skip_switch_exposes_role_scope_and_event_name(hass, freezer):
     freezer.move_to("2026-07-04 21:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
