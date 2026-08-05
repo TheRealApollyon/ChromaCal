@@ -48,9 +48,15 @@ async def test_sensor_created_for_configured_light(hass):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
+    # Migration (version 1 -> 2, Phase 8) turned the one light in
+    # ENTRY_DATA's old-shape "lights" list into a real subentry -- the
+    # unique_id is keyed on its HA-generated subentry_id, not
+    # light_entity, so it can only be known after setup, not hardcoded.
+    live_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = next(iter(live_entry.subentries.values()))
     registry = er.async_get(hass)
     entity_id = registry.async_get_entity_id(
-        "sensor", DOMAIN, "test_entry_light.front_porch_schedule"
+        "sensor", DOMAIN, f"test_entry_{subentry.subentry_id}_schedule"
     )
     assert entity_id is not None
 
@@ -72,9 +78,11 @@ async def test_sensor_falls_back_gracefully_without_sun_entity(hass):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
+    live_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = next(iter(live_entry.subentries.values()))
     registry = er.async_get(hass)
     entity_id = registry.async_get_entity_id(
-        "sensor", DOMAIN, "test_entry_2_light.front_porch_schedule"
+        "sensor", DOMAIN, f"test_entry_2_{subentry.subentry_id}_schedule"
     )
     assert entity_id is not None
 

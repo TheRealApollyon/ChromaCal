@@ -24,14 +24,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up one schedule sensor per configured light, plus one global
     Upcoming Events sensor (not per-light -- the list depends on region/
-    categories/personal events, none of which are light-specific)."""
+    categories/personal events, none of which are light-specific).
+
+    Each light's sensor is added in its own async_add_entities() call with
+    config_subentry_id set (Phase 8) -- that parameter is per-call, not
+    per-entity, so a light with multiple entities can't share one bulk
+    call with entities belonging to a different light or to the parent
+    entry (the global Upcoming Events sensor gets no subentry at all).
+    """
     coordinator: ChromaCalCoordinator = entry.runtime_data
-    entities: list[SensorEntity] = [
-        ChromaCalScheduleSensor(coordinator, entry.entry_id, light_entity)
-        for light_entity in coordinator.data
-    ]
-    entities.append(ChromaCalUpcomingEventsSensor(coordinator, entry.entry_id))
-    async_add_entities(entities)
+    for light_entity, schedule in coordinator.data.items():
+        async_add_entities(
+            [ChromaCalScheduleSensor(coordinator, entry.entry_id, light_entity)],
+            config_subentry_id=schedule.subentry_id,
+        )
+    async_add_entities([ChromaCalUpcomingEventsSensor(coordinator, entry.entry_id)])
 
 
 def _format_hour(hour: float) -> str:
@@ -51,9 +58,13 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
     ) -> None:
         super().__init__(coordinator)
         self._light_entity = light_entity
-        light_name = coordinator.data[light_entity].light_name
-        self._attr_name = f"{light_name} Schedule"
-        self._attr_unique_id = f"{entry_id}_{light_entity}_schedule"
+        schedule = coordinator.data[light_entity]
+        self._attr_name = f"{schedule.light_name} Schedule"
+        # Keyed on the light's stable subentry_id (Phase 8), not
+        # light_entity -- see __init__.py's async_migrate_entry for why
+        # that matters and how already-configured lights got moved over
+        # without losing this entity's identity.
+        self._attr_unique_id = f"{entry_id}_{schedule.subentry_id}_schedule"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)},
             name="ChromaCal",

@@ -58,7 +58,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import CONF_EMERGENCY_WAS_ACTIVE, CONF_ENTITY, CONF_SKIPPED_EVENTS, DOMAIN
+from .const import (
+    CONF_EMERGENCY_WAS_ACTIVE,
+    CONF_ENTITY,
+    CONF_SKIPPED_EVENTS,
+    CONF_SUBENTRY_ID,
+    DOMAIN,
+)
 from .scheduling.actions import (
     EMERGENCY_TRANSITION,
     build_force_white_command,
@@ -133,6 +139,11 @@ class LightSchedule:
     current_segment: NightSegment | None
     sunset_hour: float | None
     schedule_end_hour: float
+    # The light's owning Config Subentry id (Phase 8) -- what sensor.py/
+    # button.py key per-light unique_ids on now, instead of light_entity,
+    # and what they pass to async_add_entities(config_subentry_id=...) so
+    # the entity shows up under the right subentry in the UI.
+    subentry_id: str
 
 
 class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
@@ -393,6 +404,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 current_segment=current,
                 sunset_hour=sunset_hour,
                 schedule_end_hour=resolve_cfg_end_hour(light),
+                subentry_id=light_data.get(CONF_SUBENTRY_ID, ""),
             )
             if current is not None:
                 _LOGGER.info(

@@ -13,16 +13,30 @@ needed in async_unload_entry.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
+from typing import Any
 
 import homeassistant.util.dt as dt_util
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 
-from .const import CONF_CATEGORIES, CONF_LIGHTS, CONF_REGION
+from .const import (
+    CONF_CATEGORIES,
+    CONF_ENTITY,
+    CONF_LIGHTS,
+    CONF_NAME,
+    CONF_REGION,
+    CONF_SUBENTRY_ID,
+    DOMAIN,
+    LIGHT_SUBENTRY_TYPE,
+)
 from .coordinator import ChromaCalCoordinator
 from .frontend import async_register_frontend, async_unregister_frontend
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[str] = ["sensor", "switch", "button"]
 
@@ -34,6 +48,70 @@ COLOR_CYCLE_INTERVAL = timedelta(seconds=60)
 type ChromaCalConfigEntry = ConfigEntry[ChromaCalCoordinator]
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
+    """Version 1 -> 2: move entry.data[CONF_LIGHTS] into real Config
+    Subentries (Phase 8), one per light, each getting an HA-generated
+    stable subentry_id -- and repoint each light's already-live sensor/
+    button entities from their old light_entity-keyed unique_id to a
+    subentry_id-keyed one, so already-configured installs don't lose
+    those entities' entity_id, history, or any customization.
+
+    Closes the deferred design decision CLAUDE.md has carried since the
+    Phase 5a orphaned-sensor investigation: unique_id was keyed on a
+    light's `entity` string, which silently orphaned the old entity the
+    moment that string ever changed. Called automatically by HA's own
+    config-entry setup machinery before async_setup_entry, exactly once,
+    gated on entry.version -- see config_entries.py's own
+    `hasattr(component, "async_migrate_entry")` check.
+    """
+    if entry.version > 1:
+        return True
+
+    registry = er.async_get(hass)
+    old_lights: list[dict[str, Any]] = entry.data.get(CONF_LIGHTS, [])
+
+    for light_data in old_lights:
+        light_entity = light_data.get(CONF_ENTITY, "")
+        subentry = ConfigSubentry(
+            data=light_data,
+            subentry_type=LIGHT_SUBENTRY_TYPE,
+            title=light_data.get(CONF_NAME) or light_entity or "Light",
+            unique_id=None,
+        )
+        hass.config_entries.async_add_subentry(entry, subentry)
+
+        for domain, suffix in (("sensor", "schedule"), ("button", "force_white")):
+            old_unique_id = f"{entry.entry_id}_{light_entity}_{suffix}"
+            entity_id = registry.async_get_entity_id(domain, DOMAIN, old_unique_id)
+            if entity_id is None:
+                continue
+            new_unique_id = f"{entry.entry_id}_{subentry.subentry_id}_{suffix}"
+            registry.async_update_entity(
+                entity_id,
+                new_unique_id=new_unique_id,
+                config_subentry_id=subentry.subentry_id,
+            )
+            _LOGGER.info(
+                "ChromaCal: migrated %s unique_id for %s -- entity_id unchanged",
+                domain,
+                entity_id,
+            )
+
+    new_data = {key: value for key, value in entry.data.items() if key != CONF_LIGHTS}
+    hass.config_entries.async_update_entry(entry, data=new_data, version=2)
+    return True
+
+
+def _lights_from_subentries(entry: ChromaCalConfigEntry) -> list[dict[str, Any]]:
+    """Every configured light's data, sourced from the entry's Config
+    Subentries (Phase 8) instead of the old CONF_LIGHTS list."""
+    return [
+        {**subentry.data, CONF_SUBENTRY_ID: subentry.subentry_id}
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == LIGHT_SUBENTRY_TYPE
+    ]
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
     """Set up ChromaCal from a config entry."""
     coordinator = ChromaCalCoordinator(
@@ -41,7 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
         entry,
         region=entry.data[CONF_REGION],
         categories=entry.data[CONF_CATEGORIES],
-        lights=entry.data[CONF_LIGHTS],
+        lights=_lights_from_subentries(entry),
     )
     await coordinator.async_config_entry_first_refresh()
 

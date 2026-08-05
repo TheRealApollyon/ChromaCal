@@ -31,10 +31,73 @@
           "warmwhite_time": "Warm white cutoff time",
           "warmwhite_enabled": "Enable warm white cutoff"
         }
+      },
+      "reconfigure_region": {
+        "title": "Your region",
+        "description": "Sets your primary holiday calendar. You can blend in other regions later.",
+        "data": {
+          "region": "Region"
+        }
+      },
+      "reconfigure_categories": {
+        "title": "What matters to your home",
+        "description": "Pick what you want ChromaCal to celebrate. Nothing runs until you choose it.",
+        "data": {
+          "categories": "Categories"
+        }
       }
     },
     "abort": {
-      "single_instance_allowed": "ChromaCal is already configured. Add more lights from the integration's options."
+      "single_instance_allowed": "ChromaCal is already configured. Add, edit, or remove lights from the integration's devices instead.",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+    }
+  },
+  "config_subentries": {
+    "light": {
+      "entry_type": "Light",
+      "initiate_flow": {
+        "user": "Add light",
+        "reconfigure": "Reconfigure light"
+      },
+      "step": {
+        "user": {
+          "title": "Add a light",
+          "description": "Works with any light entity — porch, living room, bedroom.",
+          "data": {
+            "name": "Light name",
+            "zone": "Zone (optional)",
+            "entity": "HA entity",
+            "start_type": "Turn on",
+            "start_time": "Start time (if \"time\" selected above)",
+            "end_type": "Turn off",
+            "end_time": "End time (if \"time\" selected above)",
+            "fade_in": "Fade in (seconds)",
+            "fade_out": "Fade out (seconds)",
+            "warmwhite_time": "Warm white cutoff time",
+            "warmwhite_enabled": "Enable warm white cutoff"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit light",
+          "description": "Change this light's settings.",
+          "data": {
+            "name": "Light name",
+            "zone": "Zone (optional)",
+            "entity": "HA entity",
+            "start_type": "Turn on",
+            "start_time": "Start time (if \"time\" selected above)",
+            "end_type": "Turn off",
+            "end_time": "End time (if \"time\" selected above)",
+            "fade_in": "Fade in (seconds)",
+            "fade_out": "Fade out (seconds)",
+            "warmwhite_time": "Warm white cutoff time",
+            "warmwhite_enabled": "Enable warm white cutoff"
+          }
+        }
+      },
+      "abort": {
+        "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      }
     }
   }
 }

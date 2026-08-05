@@ -54,16 +54,21 @@ async def async_setup_entry(
     """
     coordinator = entry.runtime_data
 
-    entities: list[ButtonEntity] = [
-        ChromaCalSaluteButton(coordinator, entry.entry_id),
-        ChromaCalCatchUpButton(coordinator, entry.entry_id),
-        ChromaCalStopButton(coordinator, entry.entry_id),
-    ]
-    entities.extend(
-        ChromaCalForceWhiteButton(coordinator, entry.entry_id, light_entity)
-        for light_entity in coordinator.data
+    async_add_entities(
+        [
+            ChromaCalSaluteButton(coordinator, entry.entry_id),
+            ChromaCalCatchUpButton(coordinator, entry.entry_id),
+            ChromaCalStopButton(coordinator, entry.entry_id),
+        ]
     )
-    async_add_entities(entities)
+    # Force White is per-light, so each gets its own async_add_entities()
+    # call with config_subentry_id set (Phase 8) -- see sensor.py's
+    # async_setup_entry for why that can't be one bulk call.
+    for light_entity, schedule in coordinator.data.items():
+        async_add_entities(
+            [ChromaCalForceWhiteButton(coordinator, entry.entry_id, light_entity)],
+            config_subentry_id=schedule.subentry_id,
+        )
 
 
 class ChromaCalSaluteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonEntity):
@@ -169,9 +174,11 @@ class ChromaCalForceWhiteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonE
     ) -> None:
         super().__init__(coordinator)
         self._light_entity = light_entity
-        light_name = coordinator.data[light_entity].light_name
-        self._attr_name = f"{light_name} Force White"
-        self._attr_unique_id = f"{entry_id}_{light_entity}_force_white"
+        schedule = coordinator.data[light_entity]
+        self._attr_name = f"{schedule.light_name} Force White"
+        # Keyed on subentry_id (Phase 8) -- see sensor.py's identical
+        # change and __init__.py's async_migrate_entry.
+        self._attr_unique_id = f"{entry_id}_{schedule.subentry_id}_force_white"
         self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
 
     @property

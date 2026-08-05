@@ -47,6 +47,19 @@ def _button_id(registry, entry_id: str, suffix: str) -> str | None:
     return registry.async_get_entity_id("button", DOMAIN, f"{entry_id}{suffix}")
 
 
+def _force_white_button_id(hass, light_entity: str) -> str | None:
+    """Force White's unique_id is keyed on subentry_id (Phase 8), not
+    light_entity, so it can't be guessed -- found by its own role/
+    light_entity attributes instead, same as the frontend does."""
+    for state in hass.states.async_all("button"):
+        if (
+            state.attributes.get("role") == "force_white"
+            and state.attributes.get("light_entity") == light_entity
+        ):
+            return state.entity_id
+    return None
+
+
 async def test_salute_catchup_stop_and_force_white_buttons_are_created(hass, freezer):
     freezer.move_to("2026-07-04 12:00:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
@@ -56,7 +69,7 @@ async def test_salute_catchup_stop_and_force_white_buttons_are_created(hass, fre
     assert _button_id(registry, entry.entry_id, "_salute") is not None
     assert _button_id(registry, entry.entry_id, "_catch_up_sync") is not None
     assert _button_id(registry, entry.entry_id, "_stop") is not None
-    assert _button_id(registry, entry.entry_id, f"_{LIGHT_ENTITY}_force_white") is not None
+    assert _force_white_button_id(hass, LIGHT_ENTITY) is not None
 
 
 async def test_global_and_force_white_buttons_expose_role_for_frontend_grouping(hass, freezer):
@@ -77,7 +90,7 @@ async def test_global_and_force_white_buttons_expose_role_for_frontend_grouping(
     stop_id = _button_id(registry, entry.entry_id, "_stop")
     assert hass.states.get(stop_id).attributes["role"] == "stop"
 
-    force_white_id = _button_id(registry, entry.entry_id, f"_{LIGHT_ENTITY}_force_white")
+    force_white_id = _force_white_button_id(hass, LIGHT_ENTITY)
     force_white_attrs = hass.states.get(force_white_id).attributes
     assert force_white_attrs["role"] == "force_white"
     assert force_white_attrs["light_entity"] == LIGHT_ENTITY

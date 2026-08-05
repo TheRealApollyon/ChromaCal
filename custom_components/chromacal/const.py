@@ -23,6 +23,21 @@ CONF_SKIPPED_EVENTS = "skipped_events"
 # from this -- it stays fresh/in-memory, same reasoning as tonight_skips.
 CONF_EMERGENCY_WAS_ACTIVE = "emergency_was_active"
 
+# ── Lights are Config Subentries (Phase 8), not a data list ─────────
+# Stable subentry_id (HA-generated, a ULID) replaces light_entity as the
+# identity unique_ids are keyed on -- see the Phase 8 plan discussion and
+# __init__.py's async_migrate_entry for the migration this closes.
+LIGHT_SUBENTRY_TYPE = "light"
+
+# Synthetic key injected onto each light dict in coordinator.lights,
+# sourced from the owning ConfigSubentry's subentry_id. Not a real
+# per-light config field and never written by config_flow's own forms --
+# purely a convenience so sensor.py/button.py can read it off the same
+# plain dict shape as every other light field, without threading a
+# parallel subentry_id argument through every call site that already
+# takes a light dict.
+CONF_SUBENTRY_ID = "_subentry_id"
+
 # ── Per-light config keys (mirrors the v1 saveLight() object shape) ─
 CONF_NAME = "name"
 CONF_ZONE = "zone"

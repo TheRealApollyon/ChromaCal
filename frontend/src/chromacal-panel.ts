@@ -82,6 +82,13 @@ export class ChromaCalPanel extends LitElement {
         <header>
           <h1>ChromaCal</h1>
           <div class="header-right">
+            <a
+              class="settings-link"
+              href="/config/integrations/integration/chromacal"
+              title="Manage lights, categories, and region in Settings"
+            >
+              Manage Lights &amp; Categories
+            </a>
             <button
               class="emergency-toggle ${model.globals.emergencyOn ? "active" : ""}"
               ?disabled=${!model.globals.emergencyEntityId}
@@ -397,6 +404,23 @@ export class ChromaCalPanel extends LitElement {
         display: flex;
         align-items: center;
         gap: 10px;
+      }
+
+      /* Link out to Settings > Devices & Services > ChromaCal -- not a
+         new settings surface, just discoverability for the Reconfigure/
+         subentry flows that live there (see the Phase 8 plan). */
+      .settings-link {
+        color: var(--cc-muted);
+        font-size: 13px;
+        text-decoration: none;
+        border: 1px solid var(--cc-border);
+        border-radius: var(--cc-radius);
+        padding: 6px 12px;
+      }
+
+      .settings-link:hover {
+        border-color: var(--cc-accent);
+        color: var(--cc-accent);
       }
 
       h1 {
