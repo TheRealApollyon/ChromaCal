@@ -122,28 +122,32 @@ schedule-resolution functions (segment selection, collision resolution,
 fire-key computation) so a similar silent failure gets caught by a test
 instead of by the OFFLINE badge in production.
 
-## Deferred design decisions — required for the options-flow phase
+## Deferred design decisions — resolved in Phase 8
 
-**Per-light stable identity, not just `entity`.** `sensor.py`'s schedule
-sensor derives its `unique_id` directly from a light's `entity` string
+**Per-light stable identity, not just `entity`.** RESOLVED in Phase 8. Lights
+are now Config Subentries (`ConfigSubentryFlow`, one per light), each getting
+an HA-generated stable `subentry_id` (a ULID) that `sensor.py`/`button.py` key
+`unique_id` on instead of the light's `entity` string. `async_migrate_entry`
+in `__init__.py` moves any pre-Phase-8 install's `entry.data["lights"]` list
+into real subentries and repoints existing sensor/button entities' `unique_id`
+(via `entity_registry.async_update_entity(new_unique_id=..., config_subentry_id=...)`)
+without touching their `entity_id` — closing the exact orphaned-sensor gap
+from the Phase 5a incident described below. Proven both by
+`tests/components/chromacal/test_migration.py` (seeds the old shape, asserts
+survival) and by live verification against a genuinely pre-Phase-8 entry in a
+disposable container.
+
+Original problem, kept for context: `sensor.py`'s schedule sensor used to
+derive its `unique_id` directly from a light's `entity` string
 (`f"{entry_id}_{light_entity}_schedule"`). That's harmless while `entity` is
-write-once (set only during initial config-flow setup), but the moment the
-planned options flow lets a user repoint an existing light at a different HA
-entity, this bites every time: to HA's registry, `unique_id` *is* identity,
-so changing the string that feeds it creates a brand-new entity and silently
-orphans the old one (`unavailable`, `restored: true`, forever, until someone
-notices and removes it by hand). Hit exactly this in Phase 5a from a manual
-light-entity swap in config entry data (`switch.decorative_lights` ->
-`light.bed_light`); cleaned the orphan up via a direct entity-registry edit,
-but that was cleanup, not a fix — the underlying cause is still live.
-
-Required as part of the options-flow phase's design, not something to patch
-after the fact: give each light in `CONF_LIGHTS` a stable ID (e.g. a UUID)
-generated once when the light is first added, stored alongside
-`name`/`zone`/`entity`, and key `unique_id` generation (sensor.py, and any
-future per-light entity) off that stable ID instead of off `entity`. Decide
-this data shape at the start of that phase — retrofitting it after real
-per-light configs already exist would need its own migration.
+write-once, but the moment a user could repoint an existing light at a
+different HA entity, this bit every time: to HA's registry, `unique_id` *is*
+identity, so changing the string that feeds it creates a brand-new entity and
+silently orphans the old one (`unavailable`, `restored: true`, forever, until
+someone notices and removes it by hand). Hit exactly this in Phase 5a from a
+manual light-entity swap in config entry data (`switch.decorative_lights` ->
+`light.bed_light`); cleaned the orphan up via a direct entity-registry edit
+at the time, but that was cleanup, not a fix.
 
 ## Current branch state
 
@@ -214,6 +218,86 @@ Check this FIRST, before concluding a Docker/host-level fault: open the
 container's URL in a browser and see whether it's actually sitting on the
 onboarding flow. Only chase infrastructure theories once onboarding is
 confirmed complete and the hang persists.
+
+## Windows Git Bash gotcha — `docker run -v`/`docker exec` paths get silently mangled
+
+Symptom: a container built with `docker run -v "/c/path/on/host:/config" ...`
+comes up, HTTP responds, onboarding even works — but a custom component
+mounted via a second `-v` never actually appears inside the container
+(`ls /config/custom_components/chromacal` -> "No such file or directory"),
+and `docker inspect --format '{{.Mounts}}'` shows garbled source/destination
+paths like `...;D -> \Git\config` instead of the real POSIX paths. Also seen
+as `docker exec ... cat /config/x` failing with a path like
+`D:/Git/config/x: can't find mount point` even though the same path works
+fine via `docker exec ... sh -c 'cat /config/x'`.
+
+Cause: Git Bash (MSYS2) auto-converts POSIX-looking arguments to Windows
+paths before they ever reach `docker`, including inside `-v` flags and
+`docker exec` command arguments — silently, with no warning. This corrupted
+an entire container's custom-component mount for hours in Phase 8 before the
+missing directory was noticed; the container looked healthy the whole time
+(root `/config` mount happened to still work, so onboarding/config edits via
+`docker exec ... cat/write /config/configuration.yaml` succeeded and masked
+the problem).
+
+Fix: prefix every `docker run`/`docker exec`/`docker inspect` invocation that
+touches a `/`-style path with `MSYS_NO_PATHCONV=1`, and after creating any
+container with bind mounts, immediately verify with
+`docker inspect <name> --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'`
+that the paths look right — don't just trust that the container booted
+cleanly.
+
+## Sandbox gotcha — YAML `demo:` integration hangs boot here; config-entry Demo does not
+
+Symptom: a disposable HA container's log stops dead right after "The legacy
+device tracker platform demo.device_tracker is being set up" — 0% CPU,
+no further output, no error, indefinitely. Reproduced identically across
+multiple fresh containers in Phase 8, ruling out container-specific
+corruption; a container with `light: platform: demo` also fails immediately
+(that specific YAML platform form isn't supported in current HA — "does not
+support platform setup").
+
+This is specific to the **YAML** `demo:` integration's legacy
+`device_tracker` platform setup in this sandboxed environment (likely a
+blocking call with no working DNS/network here) — it is not a general HA
+startup problem. The **config-entry-based** Demo integration (the one HA's
+own onboarding flow adds automatically, or `Settings > Add Integration >
+Demo` where supported) sets up the same 58-ish demo devices/entities without
+touching that code path, and boots cleanly.
+
+For live-verification containers that just need throwaway light entities to
+attach ChromaCal lights to: prefer a `template:` light (fully virtual, zero
+network dependency) or rely on the config-entry Demo integration. Avoid
+`demo:` in `configuration.yaml`.
+
+## Custom-component gotcha — `translations/en.json` needs literal text, not `[%key:...%]` refs
+
+Symptom: a config/subentry flow's abort dialog (e.g. after a successful
+reconfigure) shows the raw string `[%key:common::config_flow::abort::reconfigure_successful%]`
+in the real HA UI instead of resolved text, even though `strings.json` and
+`translations/en.json` both look correct and match the exact pattern real
+core integrations use (`ollama`, `mqtt`, `anthropic`, etc. all reference
+`abort.reconfigure_successful` the same way).
+
+Cause: `[%key:...%]` is a *source-format* shorthand. For core HA
+integrations, `script/translations` (part of HA's own build pipeline)
+resolves every `[%key:%]` reference in `strings.json` into literal text before
+it ships in `translations/<lang>.json`. Custom components never run that
+pipeline — whatever is physically in `translations/en.json` is what the
+frontend renders, unresolved references included. Phase 8 hit this after
+copying `strings.json` to `translations/en.json` verbatim (`cp`), assuming
+the two should always be byte-identical; that assumption is only safe for
+keys that don't use `[%key:%]` shorthand.
+
+Fix: `strings.json` may keep `[%key:...%]` references (it's the correct
+source format, useful if this ever becomes a HACS-published integration that
+runs through proper tooling), but `translations/en.json` must contain the
+final literal resolved text for every string, looked up from HA's own
+`homeassistant/strings.json` (`common.config_flow.abort.<key>`, etc.) if
+unsure of the exact wording. Also note: HA caches parsed translations
+in-process — a fix to the file needs a container restart (not just a
+browser reload) before it's visible in the UI, which can make the fix look
+like it didn't work if you only reload the page.
 
 ## Suggested first session shape
 
