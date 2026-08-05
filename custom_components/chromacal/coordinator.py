@@ -64,6 +64,7 @@ from .const import (
     CONF_SKIPPED_EVENTS,
     CONF_SUBENTRY_ID,
     DOMAIN,
+    LIGHT_SUBENTRY_TYPE,
 )
 from .scheduling.actions import (
     EMERGENCY_TRANSITION,
@@ -155,13 +156,11 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         entry: ConfigEntry,
         region: str,
         categories: dict[str, bool],
-        lights: list[dict[str, Any]],
     ) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=UPDATE_INTERVAL)
         self._entry = entry
         self.region = region
         self.categories = categories
-        self.lights = lights
         # Once-per-day sunset cache, matching v1's sunsetH/sunsetFetchDay --
         # lives on this long-lived coordinator instance, not a bare module
         # global, and not recomputed just because _async_update_data() runs
@@ -239,6 +238,32 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # which is a one-shot breadcrumb, not resumable state.
         self.emergency_active: bool = False
         self._emergency_unsub: Callable[[], None] | None = None
+
+    @property
+    def lights(self) -> list[dict[str, Any]]:
+        """Every configured light's data, read fresh from the config
+        entry's subentries on every access (Phase 8) -- deliberately NOT
+        cached at __init__ time.
+
+        Real gap found while writing this: HA's own generic subentry-
+        delete path (the websocket command a real "remove this light" UI
+        action calls) only mutates entry.subentries -- it does not reload
+        the config entry. A one-time snapshot would keep scheduling a
+        removed light until the next full HA restart. Registering an
+        update listener to force a reload on any entry change was the
+        obvious fix, except it isn't available here: this integration's
+        own reconfigure/subentry-edit flows already reload via
+        async_update_reload_and_abort, and HA raises if an entry has both
+        an update listener AND that reload mechanism in play. Reading
+        subentries fresh here instead means any change -- through any
+        path, ours or HA's generic one -- shows up on the very next
+        refresh cycle with no reload needed at all.
+        """
+        return [
+            {**subentry.data, CONF_SUBENTRY_ID: subentry.subentry_id}
+            for subentry in self._entry.subentries.values()
+            if subentry.subentry_type == LIGHT_SUBENTRY_TYPE
+        ]
 
     def _resolve_sunset(self) -> float | None:
         """Return today's sunset as a decimal hour, cached once per day.

@@ -29,7 +29,6 @@ from .const import (
     CONF_LIGHTS,
     CONF_NAME,
     CONF_REGION,
-    CONF_SUBENTRY_ID,
     DOMAIN,
     LIGHT_SUBENTRY_TYPE,
 )
@@ -102,16 +101,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) 
     return True
 
 
-def _lights_from_subentries(entry: ChromaCalConfigEntry) -> list[dict[str, Any]]:
-    """Every configured light's data, sourced from the entry's Config
-    Subentries (Phase 8) instead of the old CONF_LIGHTS list."""
-    return [
-        {**subentry.data, CONF_SUBENTRY_ID: subentry.subentry_id}
-        for subentry in entry.subentries.values()
-        if subentry.subentry_type == LIGHT_SUBENTRY_TYPE
-    ]
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
     """Set up ChromaCal from a config entry."""
     coordinator = ChromaCalCoordinator(
@@ -119,7 +108,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
         entry,
         region=entry.data[CONF_REGION],
         categories=entry.data[CONF_CATEGORIES],
-        lights=_lights_from_subentries(entry),
     )
     await coordinator.async_config_entry_first_refresh()
 
