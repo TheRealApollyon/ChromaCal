@@ -49,7 +49,7 @@
     },
     "abort": {
       "single_instance_allowed": "ChromaCal is already configured. Add, edit, or remove lights from the integration's devices instead.",
-      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      "reconfigure_successful": "Reconfiguration was successful"
     }
   },
   "config_subentries": {
@@ -96,7 +96,7 @@
         }
       },
       "abort": {
-        "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+        "reconfigure_successful": "Reconfiguration was successful"
       }
     }
   }
