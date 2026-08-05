@@ -309,17 +309,31 @@ class LightSubentryFlowHandler(config_entries.ConfigSubentryFlow):
 
         Unlike editing (async_update_reload_and_abort), there's no
         built-in create-and-reload helper -- ConfigSubentryFlowManager
-        only adds the new subentry to the entry AFTER this step returns.
-        Without a reload afterward, the new light gets a subentry but no
-        sensor/button entities at all until the next manual reload or HA
-        restart, since those platforms only add entities once, at
-        async_setup_entry time. Schedule one here so the new light is
-        immediately live.
+        only adds the new subentry to the entry AFTER this step returns
+        (see its async_finish_flow, which calls async_add_subentry
+        itself once our result comes back). Without a reload afterward,
+        the new light gets a subentry but no sensor/button entities at
+        all until the next manual reload or HA restart, since those
+        platforms only add entities once, at async_setup_entry time --
+        confirmed via test_add_light_creates_a_new_subentry_and_entities.
+
+        hass.async_create_task defaults to eager_start=True, which runs
+        the reload inline, synchronously, as part of *this* call --
+        before async_finish_flow's async_add_subentry has run. That
+        raced the reload against the subentry actually being added and
+        the new light lost, silently missing its own first setup. Passing
+        eager_start=False defers the reload to the next event-loop
+        iteration, which only happens after this whole synchronous call
+        chain (including async_finish_flow) has completed.
         """
         if user_input is not None:
             light = _light_dict_from_input(user_input)
             result = self.async_create_entry(title=light[CONF_NAME], data=light)
-            self.hass.config_entries.async_schedule_reload(self._entry_id)
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self._entry_id),
+                "chromacal_add_light_reload",
+                eager_start=False,
+            )
             return result
 
         return self.async_show_form(step_id="user", data_schema=_light_schema())
