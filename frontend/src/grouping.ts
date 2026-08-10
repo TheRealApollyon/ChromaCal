@@ -79,6 +79,14 @@ export interface UpcomingEventModel {
    * backend itself already enforces (tonight-skip switches only exist
    * for today's candidates). */
   tonightSkip: SkipModel | null;
+  /** True if this is today's event AND it's the one currently picked
+   * (all-lights -- see coordinator.py's tonight_pick field docstring).
+   * Only meaningful for today, same restriction as tonightSkip above. */
+  isPicked: boolean;
+  /** This event's current color override, or null if it's running its
+   * built-in default colors. Present regardless of date (v1's 🎨 button
+   * works on any day, not just today -- see chromacal-panel.ts). */
+  overrideColors: string[] | null;
 }
 
 /** The wire shape of one entry in the Upcoming Events sensor's `events`
@@ -92,6 +100,14 @@ interface RawUpcomingEvent {
   colors: string[];
   is_today: boolean;
   is_personal_range: boolean;
+}
+
+/** Wire shape of the Upcoming Events sensor's own top-level attributes
+ * (siblings of `events`, not per-event) -- see sensor.py. */
+interface RawUpcomingAttrs {
+  events?: RawUpcomingEvent[];
+  tonight_pick?: string | null;
+  color_overrides?: Record<string, string[]>;
 }
 
 export interface GlobalControlsModel {
@@ -217,8 +233,12 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
 
   const permanentSkipByName = new Map(permanentSkips.map((s) => [s.eventName, s]));
   const tonightSkipByName = new Map(tonightSkips.map((s) => [s.eventName, s]));
-  const upcomingState = upcomingEventsEntityId ? hass.states[upcomingEventsEntityId] : undefined;
-  const rawEvents = (upcomingState?.attributes.events as RawUpcomingEvent[] | undefined) ?? [];
+  const upcomingAttrs = (upcomingEventsEntityId
+    ? hass.states[upcomingEventsEntityId]?.attributes
+    : undefined) as RawUpcomingAttrs | undefined;
+  const rawEvents = upcomingAttrs?.events ?? [];
+  const tonightPick = upcomingAttrs?.tonight_pick ?? null;
+  const colorOverrides = upcomingAttrs?.color_overrides ?? {};
   const upcomingEvents: UpcomingEventModel[] = rawEvents.map((e) => ({
     date: e.date,
     name: e.name,
@@ -230,6 +250,8 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
     isPersonalRange: e.is_personal_range,
     permanentSkip: permanentSkipByName.get(e.name) ?? null,
     tonightSkip: e.is_today ? (tonightSkipByName.get(e.name) ?? null) : null,
+    isPicked: e.is_today && tonightPick === e.name,
+    overrideColors: colorOverrides[e.name] ?? null,
   }));
 
   return { globals, lights, tonightSkips, permanentSkips, upcomingEvents };

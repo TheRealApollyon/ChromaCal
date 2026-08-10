@@ -32,6 +32,15 @@ export class ChromaCalPanel extends LitElement {
   @state() private _manageSkipsOpen = false;
   @state() private _controlsOpen = false;
 
+  /** Color Override modal state -- null means closed. There's no other
+   * modal infrastructure in this panel yet (Tonight's Pick needed none,
+   * it's a plain click-to-toggle like the skip buttons); this is it. */
+  @state() private _colorModalEvent: string | null = null;
+  @state() private _colorModalColors: string[] = [];
+  @state() private _colorModalPickerValue = "#ffffff";
+
+  private static readonly MAX_COLORS = 6;
+
   connectedCallback(): void {
     super.connectedCallback();
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -71,6 +80,60 @@ export class ChromaCalPanel extends LitElement {
 
   private _toggleSwitch(entityId: string | null, isOn: boolean): void {
     this._callService("switch", isOn ? "turn_off" : "turn_on", entityId);
+  }
+
+  private _setTonightPick(eventName: string): void {
+    // Not entity-targeted -- Tonight's Pick applies to every configured
+    // light at once (see coordinator.py's tonight_pick field docstring),
+    // and calling this again with the same event toggles it back off.
+    this.hass.callService("chromacal", "set_tonight_pick", { event_name: eventName });
+  }
+
+  private _openColorModal(event: UpcomingEventModel): void {
+    this._colorModalEvent = event.name;
+    // Pre-fill from the current override if there is one, same as v1's
+    // openEventColorModal() -- otherwise start from the event's own
+    // built-in default colors, not an empty list.
+    this._colorModalColors = [...(event.overrideColors ?? event.colors)];
+  }
+
+  private _closeColorModal(): void {
+    this._colorModalEvent = null;
+    this._colorModalColors = [];
+  }
+
+  private _addColorModalColor(): void {
+    if (this._colorModalColors.length >= ChromaCalPanel.MAX_COLORS) return;
+    this._colorModalColors = [...this._colorModalColors, this._colorModalPickerValue];
+  }
+
+  private _removeColorModalColor(index: number): void {
+    this._colorModalColors = this._colorModalColors.filter((_, i) => i !== index);
+  }
+
+  private _moveColorModalColor(index: number, direction: -1 | 1): void {
+    const target = index + direction;
+    if (target < 0 || target >= this._colorModalColors.length) return;
+    const next = [...this._colorModalColors];
+    [next[index], next[target]] = [next[target], next[index]];
+    this._colorModalColors = next;
+  }
+
+  private _saveColorOverride(): void {
+    if (!this._colorModalEvent || this._colorModalColors.length === 0) return;
+    this.hass.callService("chromacal", "set_color_override", {
+      event_name: this._colorModalEvent,
+      colors: this._colorModalColors,
+    });
+    this._closeColorModal();
+  }
+
+  private _resetColorOverride(): void {
+    if (!this._colorModalEvent) return;
+    this.hass.callService("chromacal", "reset_color_override", {
+      event_name: this._colorModalEvent,
+    });
+    this._closeColorModal();
   }
 
   render() {
@@ -195,6 +258,88 @@ export class ChromaCalPanel extends LitElement {
             </details>
           </aside>
         </div>
+
+        ${this._colorModalEvent ? this._renderColorModal() : nothing}
+      </div>
+    `;
+  }
+
+  private _renderColorModal() {
+    const eventName = this._colorModalEvent!;
+    const colors = this._colorModalColors;
+    return html`
+      <div class="modal-overlay" @click=${this._closeColorModal}>
+        <div class="modal-dialog" @click=${(e: Event) => e.stopPropagation()}>
+          <h3>Customize colors</h3>
+          <p class="modal-event-name">${eventName}</p>
+
+          <div class="modal-chip-row">
+            ${colors.length === 0
+              ? html`<p class="muted">No colors -- add at least one below.</p>`
+              : colors.map(
+                  (color, index) => html`
+                    <div class="modal-chip-item">
+                      <span class="modal-chip" style="background:${color}" title=${color}></span>
+                      <div class="modal-chip-btns">
+                        <button
+                          class="chip-move-btn"
+                          ?disabled=${index === 0}
+                          @click=${() => this._moveColorModalColor(index, -1)}
+                          title="Move left"
+                        >
+                          ‹
+                        </button>
+                        <button
+                          class="chip-move-btn chip-remove-btn"
+                          @click=${() => this._removeColorModalColor(index)}
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                        <button
+                          class="chip-move-btn"
+                          ?disabled=${index === colors.length - 1}
+                          @click=${() => this._moveColorModalColor(index, 1)}
+                          title="Move right"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    </div>
+                  `,
+                )}
+          </div>
+
+          <div class="modal-add-row">
+            <input
+              type="color"
+              .value=${this._colorModalPickerValue}
+              @input=${(e: Event) =>
+                (this._colorModalPickerValue = (e.target as HTMLInputElement).value)}
+            />
+            <button
+              class="control-btn"
+              ?disabled=${colors.length >= ChromaCalPanel.MAX_COLORS}
+              @click=${this._addColorModalColor}
+            >
+              Add color
+            </button>
+          </div>
+
+          <div class="modal-actions">
+            <button class="control-btn" @click=${this._resetColorOverride}>Reset to default</button>
+            <div class="modal-actions-right">
+              <button class="control-btn" @click=${this._closeColorModal}>Cancel</button>
+              <button
+                class="control-btn control-btn-primary"
+                ?disabled=${colors.length === 0}
+                @click=${this._saveColorOverride}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -222,17 +367,19 @@ export class ChromaCalPanel extends LitElement {
         <span class="up-chips">
           ${event.colors.map((c) => html`<span class="up-chip" style="background:${c}"></span>`)}
         </span>
+        ${event.isToday && !permSkip?.isOn && !nightSkip?.isOn
+          ? html`<button
+              class="up-action-btn ${event.isPicked ? "active" : ""}"
+              @click=${() => this._setTonightPick(event.name)}
+              title=${event.isPicked ? "Clear -- resume split" : "Pick this event tonight"}
+            >
+              ${event.isPicked ? "★" : "☆"}
+            </button>`
+          : nothing}
         <button
-          class="up-action-btn"
-          disabled
-          title="Tonight's Pick -- not wired up yet, coming in a follow-up"
-        >
-          ☆
-        </button>
-        <button
-          class="up-action-btn"
-          disabled
-          title="Customize colors -- not wired up yet, coming in a follow-up"
+          class="up-action-btn ${event.overrideColors ? "active" : ""}"
+          @click=${() => this._openColorModal(event)}
+          title=${event.overrideColors ? "Customized -- click to edit" : "Customize colors for this event"}
         >
           🎨
         </button>
@@ -910,6 +1057,130 @@ export class ChromaCalPanel extends LitElement {
       .collapsible-section:not([open]) .chip-row,
       .collapsible-section:not([open]) input[type="search"] {
         display: none;
+      }
+
+      .control-btn-primary {
+        background: var(--cc-accent);
+        color: var(--cc-s1);
+        border-color: var(--cc-accent);
+      }
+
+      .control-btn-primary:hover:not(:disabled) {
+        color: var(--cc-s1);
+        opacity: 0.9;
+      }
+
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      .modal-dialog {
+        background: var(--cc-bg);
+        border: 1px solid var(--cc-border);
+        border-radius: var(--cc-radius);
+        padding: 20px;
+        width: min(420px, 90vw);
+        max-height: 85vh;
+        overflow-y: auto;
+      }
+
+      .modal-dialog h3 {
+        margin: 0 0 4px;
+      }
+
+      .modal-event-name {
+        color: var(--cc-muted);
+        margin: 0 0 16px;
+      }
+
+      .modal-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        min-height: 32px;
+        margin-bottom: 16px;
+      }
+
+      .modal-chip-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .modal-chip {
+        display: block;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid var(--cc-border);
+      }
+
+      .modal-chip-btns {
+        display: flex;
+        gap: 2px;
+      }
+
+      .chip-move-btn {
+        background: none;
+        border: 1px solid var(--cc-border);
+        border-radius: 4px;
+        color: var(--cc-muted);
+        cursor: pointer;
+        font-size: 11px;
+        line-height: 1;
+        width: 20px;
+        height: 20px;
+      }
+
+      .chip-move-btn:hover:not(:disabled) {
+        border-color: var(--cc-accent);
+        color: var(--cc-accent);
+      }
+
+      .chip-move-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+
+      .chip-remove-btn:hover:not(:disabled) {
+        border-color: var(--cc-red);
+        color: var(--cc-red);
+      }
+
+      .modal-add-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .modal-add-row input[type="color"] {
+        width: 40px;
+        height: 36px;
+        padding: 0;
+        border: 1px solid var(--cc-border);
+        border-radius: 6px;
+        background: none;
+        cursor: pointer;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .modal-actions-right {
+        display: flex;
+        gap: 10px;
       }
     `,
   ];
