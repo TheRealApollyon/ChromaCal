@@ -59,8 +59,10 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    CONF_COLOR_OVERRIDES,
     CONF_EMERGENCY_WAS_ACTIVE,
     CONF_ENTITY,
+    CONF_NAME,
     CONF_SKIPPED_EVENTS,
     CONF_SUBENTRY_ID,
     DOMAIN,
@@ -186,6 +188,14 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # are static -- see the Phase 5a plan discussion for why options is
         # still the right home even though nothing here gets recreated.
         self.skipped_events: set[str] = set(entry.options.get(CONF_SKIPPED_EVENTS, []))
+        # Per-event color override: matches v1's CFG.colorOverrides, same
+        # dict[event_name, colors] shape, persisted to config entry OPTIONS
+        # the same way and for the same reason as skipped_events above --
+        # a standing setting until the user explicitly changes it again.
+        self.color_overrides: dict[str, tuple[str, ...]] = {
+            name: tuple(colors)
+            for name, colors in entry.options.get(CONF_COLOR_OVERRIDES, {}).items()
+        }
         # Skip-tonight: matches v1's CFG.tonightSkips, but flattened to a
         # single in-memory set + a date guard (the coordinator only ever
         # cares about *today's* key) rather than v1's date-keyed dict of
@@ -201,6 +211,16 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # async_track_time_change registration).
         self.tonight_skips: set[str] = set()
         self.tonight_skips_date: date | None = None
+        # Tonight's Pick: matches v1's CFG.tonightPick, but v1 scoped this
+        # per-light (CFG.tonightPick[lightName]) because its UI always had
+        # one "active" light selected. v2's panel has no such per-light
+        # concept -- a single global pick applies to every configured
+        # light at once (see _tonight_pick_for_lights() below), which is a
+        # deliberate UI simplification, not an engine change: the engine's
+        # ScheduleConfig.tonight_pick is still the same per-light dict it
+        # always was, just fed the same event name under every light's key.
+        # In-memory only, same reasoning/reset path as tonight_skips above.
+        self.tonight_pick: str | None = None
         # Which event names are skippable *tonight* -- drives the dynamic
         # tonight-skip switches (see switch.py). Recomputed alongside the
         # tonight_skips reset above, same date guard.
@@ -316,6 +336,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             return
         self.tonight_skips = set()
         self.tonight_skips_date = today
+        self.tonight_pick = None
         config = build_schedule_config(
             self.region, self.categories, skipped_events=frozenset(self.skipped_events)
         )
@@ -360,6 +381,51 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             self.tonight_skips.add(event_name)
         else:
             self.tonight_skips.discard(event_name)
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    def _tonight_pick_for_lights(self) -> dict[str, str]:
+        """The per-light dict ScheduleConfig.tonight_pick actually expects,
+        built by fanning self.tonight_pick out to every configured light's
+        name -- see tonight_pick's field docstring for why this is a
+        single global value in storage instead of v1's per-light dict."""
+        if not self.tonight_pick:
+            return {}
+        return {light.get(CONF_NAME, ""): self.tonight_pick for light in self.lights}
+
+    async def async_set_tonight_pick(self, event_name: str) -> None:
+        """Pick one event out of tonight's awareness-tier collision, for
+        every configured light. Calling this again with the same event
+        name clears it back to split mode -- matches v1's ☆-click toggle
+        behavior exactly, and the same interaction shape as the skip
+        buttons already on this card, rather than a second control.
+        """
+        self.tonight_pick = None if self.tonight_pick == event_name else event_name
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    async def async_set_color_override(self, event_name: str, colors: list[str]) -> None:
+        """Override an event's built-in colors, persisted until changed
+        or reset again -- matches v1's saveEventColorOverride()."""
+        self.color_overrides[event_name] = tuple(colors)
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={
+                **self._entry.options,
+                CONF_COLOR_OVERRIDES: {k: list(v) for k, v in self.color_overrides.items()},
+            },
+        )
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    async def async_reset_color_override(self, event_name: str) -> None:
+        """Clear an event's color override, restoring its built-in
+        default -- matches v1's resetEventColorOverride()."""
+        self.color_overrides.pop(event_name, None)
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={
+                **self._entry.options,
+                CONF_COLOR_OVERRIDES: {k: list(v) for k, v in self.color_overrides.items()},
+            },
+        )
         await self.async_refresh()  # same reasoning as async_set_permanent_skip above
 
     def _is_overridden(self, light_entity: str) -> bool:
@@ -408,6 +474,8 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             self.categories,
             skipped_events=frozenset(self.skipped_events),
             tonight_skips=frozenset(self.tonight_skips),
+            tonight_pick=self._tonight_pick_for_lights(),
+            color_overrides=self.color_overrides,
         )
         holidays = get_enabled_holidays(config, now.year)
         # personal_events intentionally omitted -- no config flow surface
@@ -632,6 +700,8 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             self.categories,
             skipped_events=frozenset(self.skipped_events),
             tonight_skips=frozenset(self.tonight_skips),
+            tonight_pick=self._tonight_pick_for_lights(),
+            color_overrides=self.color_overrides,
         )
         holidays = get_enabled_holidays(config, now.year)
         targets = set(light_entities) if light_entities is not None else None

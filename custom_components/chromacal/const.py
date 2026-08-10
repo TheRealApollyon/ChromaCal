@@ -14,6 +14,12 @@ CONF_LIGHTS = "lights"
 # lifecycle.
 CONF_SKIPPED_EVENTS = "skipped_events"
 
+# Per-event color override -- dict[event_name, list[hex]], matching v1's
+# CFG.colorOverrides shape byte-for-byte. Persisted like skipped_events
+# above (survives restarts, until explicitly changed/reset), unlike
+# tonight_pick below which is deliberately NOT persisted.
+CONF_COLOR_OVERRIDES = "color_overrides"
+
 # One-shot breadcrumb, not live state: True the instant Emergency Mode
 # starts, False the instant it stops cleanly. If the coordinator finds this
 # True on startup, HA went down mid-broadcast without ever reaching the

@@ -159,4 +159,12 @@ class ChromaCalUpcomingEventsSensor(CoordinatorEntity[ChromaCalCoordinator], Sen
                 }
                 for event in self.coordinator.upcoming_events
             ],
+            # Tonight's Pick / Color Override (all-lights, not per-event
+            # attributes -- see coordinator.py's field docstrings) -- the
+            # panel compares an event's own name against these to decide
+            # whether its ☆/🎨 buttons show as active.
+            "tonight_pick": self.coordinator.tonight_pick,
+            "color_overrides": {
+                name: list(colors) for name, colors in self.coordinator.color_overrides.items()
+            },
         }
