@@ -99,5 +99,41 @@
         "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
       }
     }
+  },
+  "services": {
+    "set_tonight_pick": {
+      "name": "Set Tonight's Pick",
+      "description": "Picks one event out of tonight's awareness-tier collision, for every configured light. Calling it again with the same event clears it back to split mode.",
+      "fields": {
+        "event_name": {
+          "name": "Event name",
+          "description": "The event to pick for tonight."
+        }
+      }
+    },
+    "set_color_override": {
+      "name": "Set color override",
+      "description": "Overrides an event's built-in colors, persisted until changed or reset again.",
+      "fields": {
+        "event_name": {
+          "name": "Event name",
+          "description": "The event whose colors to override."
+        },
+        "colors": {
+          "name": "Colors",
+          "description": "1-6 hex colors (e.g. #FF0000), applied in order for events that cycle through multiple colors."
+        }
+      }
+    },
+    "reset_color_override": {
+      "name": "Reset color override",
+      "description": "Clears an event's color override, restoring its built-in default.",
+      "fields": {
+        "event_name": {
+          "name": "Event name",
+          "description": "The event to reset."
+        }
+      }
+    }
   }
 }

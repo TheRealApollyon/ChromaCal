@@ -94,6 +94,22 @@ PANEL_URL_PATH = "chromacal"
 PANEL_STATIC_URL_BASE = "/chromacal_static"
 PANEL_WEBCOMPONENT_NAME = "chromacal-panel"
 
+# ── Tonight's Pick / Color Override services ─────────────────────
+# Services, not entities -- neither maps to a stable, addressable thing:
+# Tonight's Pick's candidates change nightly (often empty), and Color
+# Override needs a variable-length list of colors, not a fixed option
+# set. See the plan discussion for the dev-docs/source research behind
+# this call.
+SERVICE_SET_TONIGHT_PICK = "set_tonight_pick"
+SERVICE_SET_COLOR_OVERRIDE = "set_color_override"
+SERVICE_RESET_COLOR_OVERRIDE = "reset_color_override"
+
+ATTR_EVENT_NAME = "event_name"
+ATTR_COLORS = "colors"
+
+# Matches v1's chip-list cap in the color-override modal.
+MAX_COLOR_OVERRIDE_COLORS = 6
+
 DEFAULT_START_TIME = "19:00"
 DEFAULT_END_TIME = "23:00"
 DEFAULT_FADE_IN = 30

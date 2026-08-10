@@ -1,0 +1,25 @@
+# Describes the format for available ChromaCal services
+set_tonight_pick:
+  fields:
+    event_name:
+      required: true
+      selector:
+        text:
+
+set_color_override:
+  fields:
+    event_name:
+      required: true
+      selector:
+        text:
+    colors:
+      required: true
+      selector:
+        object:
+
+reset_color_override:
+  fields:
+    event_name:
+      required: true
+      selector:
+        text:

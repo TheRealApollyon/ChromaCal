@@ -17,13 +17,18 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+import voluptuous as vol
+
 import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 
 from .const import (
+    ATTR_COLORS,
+    ATTR_EVENT_NAME,
     CONF_CATEGORIES,
     CONF_ENTITY,
     CONF_LIGHTS,
@@ -31,6 +36,10 @@ from .const import (
     CONF_REGION,
     DOMAIN,
     LIGHT_SUBENTRY_TYPE,
+    MAX_COLOR_OVERRIDE_COLORS,
+    SERVICE_RESET_COLOR_OVERRIDE,
+    SERVICE_SET_COLOR_OVERRIDE,
+    SERVICE_SET_TONIGHT_PICK,
 )
 from .coordinator import ChromaCalCoordinator
 from .frontend import async_register_frontend, async_unregister_frontend
@@ -45,6 +54,28 @@ PLATFORMS: list[str] = ["sensor", "switch", "button"]
 COLOR_CYCLE_INTERVAL = timedelta(seconds=60)
 
 type ChromaCalConfigEntry = ConfigEntry[ChromaCalCoordinator]
+
+# Tonight's Pick / Color Override are services, not entities -- neither
+# maps to a stable, addressable thing (a collision's candidates change
+# nightly and are often empty; an override is a variable-length color
+# list, not a fixed option set). See the plan discussion for the
+# dev-docs/source research behind that call.
+_HEX_COLOR = vol.Match(r"^#[0-9A-Fa-f]{6}$")
+
+SET_TONIGHT_PICK_SCHEMA = vol.Schema({vol.Required(ATTR_EVENT_NAME): cv.string})
+
+SET_COLOR_OVERRIDE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_EVENT_NAME): cv.string,
+        vol.Required(ATTR_COLORS): vol.All(
+            cv.ensure_list,
+            [_HEX_COLOR],
+            vol.Length(min=1, max=MAX_COLOR_OVERRIDE_COLORS),
+        ),
+    }
+)
+
+RESET_COLOR_OVERRIDE_SCHEMA = vol.Schema({vol.Required(ATTR_EVENT_NAME): cv.string})
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
@@ -150,6 +181,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
         async_track_time_change(hass, _midnight_rollover, hour=0, minute=0, second=0)
     )
 
+    async def _async_set_tonight_pick(call: ServiceCall) -> None:
+        await coordinator.async_set_tonight_pick(call.data[ATTR_EVENT_NAME])
+
+    async def _async_set_color_override(call: ServiceCall) -> None:
+        await coordinator.async_set_color_override(
+            call.data[ATTR_EVENT_NAME], call.data[ATTR_COLORS]
+        )
+
+    async def _async_reset_color_override(call: ServiceCall) -> None:
+        await coordinator.async_reset_color_override(call.data[ATTR_EVENT_NAME])
+
+    # Registered here, not async_setup, and guarded with has_service --
+    # single_instance_allowed means there's only ever one entry to close
+    # over, so there's no target/device_id resolution needed the way a
+    # multi-instance integration would require (confirmed against
+    # rainmachine's real async_setup_entry-registered services, which use
+    # this same has_service guard for exactly this reason).
+    for service_name, schema, handler in (
+        (SERVICE_SET_TONIGHT_PICK, SET_TONIGHT_PICK_SCHEMA, _async_set_tonight_pick),
+        (SERVICE_SET_COLOR_OVERRIDE, SET_COLOR_OVERRIDE_SCHEMA, _async_set_color_override),
+        (SERVICE_RESET_COLOR_OVERRIDE, RESET_COLOR_OVERRIDE_SCHEMA, _async_reset_color_override),
+    ):
+        if hass.services.has_service(DOMAIN, service_name):
+            continue
+        hass.services.async_register(DOMAIN, service_name, handler, schema=schema)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_register_frontend(hass)
 
@@ -161,4 +218,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         async_unregister_frontend(hass)
+        for service_name in (
+            SERVICE_SET_TONIGHT_PICK,
+            SERVICE_SET_COLOR_OVERRIDE,
+            SERVICE_RESET_COLOR_OVERRIDE,
+        ):
+            hass.services.async_remove(DOMAIN, service_name)
     return unloaded
