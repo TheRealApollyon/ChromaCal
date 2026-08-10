@@ -299,6 +299,83 @@ in-process — a fix to the file needs a container restart (not just a
 browser reload) before it's visible in the UI, which can make the fix look
 like it didn't work if you only reload the page.
 
+## Frontend build gotcha — `docker run` must mount the repo root, not just `frontend/`
+
+Symptom: `npm run build` inside a `docker run -v ".../frontend:/app" ...` container
+reports success ("Built ../custom_components/chromacal/panel_dist/chromacal-panel.js")
+every time, but the host file's content and mtime never actually change --
+verified live in Phase 9 by grepping the output file for strings that were
+definitely just added to the source, and finding none, across two separate
+"successful" builds in a row.
+
+Cause: `esbuild.config.mjs`'s `outfile` is `../custom_components/chromacal/panel_dist/chromacal-panel.js`,
+relative to `frontend/`. Mounting only `frontend/` at `/app` means `/app/..`
+resolves to `/`, the container's own ephemeral filesystem root -- not
+connected to any host bind mount. esbuild genuinely writes the file and
+genuinely succeeds; the write just lands somewhere that vanishes the moment
+the `--rm` container exits, and nothing about the command's output signals
+this.
+
+Fix: mount the whole repo root (`-v ".../chromacal-release:/repo"`) and set
+`-w /repo/frontend`, so the `../custom_components` output path resolves
+inside the mount. After any frontend build meant to ship, verify by grepping
+the actual output file on the host for a string unique to the change just
+made -- don't trust a "Built ..." message alone.
+
+## Frontend gotcha — the panel's own version-busted URL can outlive a rebuild
+
+Symptom: `panel_dist/chromacal-panel.js` is rebuilt correctly (verified on
+disk), the browser is hard-reloaded, service worker caches are explicitly
+cleared via `caches.delete()` -- and the live panel *still* runs the old
+bundle, provably (checking button `title` attributes / behavior in the
+live DOM, not just eyeballing the screenshot).
+
+Cause: `frontend.py` registers the panel module at
+`{PANEL_STATIC_URL_BASE}/chromacal-panel.js?v={integration.version}` --
+deliberately cache-busting on version bumps, same trick HACS uses. If
+`manifest.json`'s `version` hasn't changed, the URL is byte-identical to
+one the browser already has a long-lived cached response for, and a normal
+HTTP cache hit on that exact URL skips the network entirely -- no
+conditional request, no revalidation, nothing for a service-worker cache
+clear to intercept, since it was never a service-worker cache in the first
+place.
+
+Fix: bump `manifest.json`'s `version` for any change that ships new panel
+JS (this is the actual intended mechanism, not a workaround), then restart
+the container so `async_register_frontend` re-registers with the new `?v=`.
+Confirm directly with `curl -s ".../chromacal-panel.js?v=<new version>"`
+before trusting the browser at all.
+
+## Live-verification gotcha — this sandbox can't reliably fake a container's clock
+
+Two techniques were tried in Phase 9 to reach a real awareness-tier
+collision date (months away) for live verification, and both failed for
+structural reasons worth recording so they aren't retried blind:
+
+- `date -s` inside the container: works in the moment, but Docker Desktop's
+  VM syncs its clock back to the host within roughly a minute -- and it's
+  not container-scoped. It shifts the *whole* Docker Desktop VM's clock,
+  silently affecting every other running container (confirmed: `chromacal-pytest`
+  showed the same fake November date moments after only `chromacal-verify`'s
+  clock was touched).
+- `libfaketime` (LD_PRELOAD, normally the correct per-process fix that
+  avoids touching the real clock at all): installed cleanly via `apk`, but
+  chaining it onto the image's existing jemalloc `LD_PRELOAD` in
+  `/etc/services.d/home-assistant/run` crash-looped the HA process
+  immediately and silently -- 0% CPU, ~5MB total container memory,
+  `ps aux` showing a live-looking PID that was actually respawning
+  instantly, no error ever reaching the container's log output. Likely a
+  musl/Alpine compatibility gap (libfaketime primarily targets glibc).
+
+What actually worked, no clock manipulation at all: copy `custom_components/chromacal`
+to a scratch directory, shift just the specific calendar entries' `month`
+day-range to the real current month in that copy only, and mount the copy
+(not the real repo) into a disposable container running on the real clock.
+Real HA process, real UI, zero risk to the actual calendar data other
+installs and the automated test suite depend on. Slower to set up than a
+clock trick would have been if one had worked, but the only one of the
+three approaches that actually did.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
