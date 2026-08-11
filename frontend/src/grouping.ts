@@ -206,9 +206,16 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
   for (const [lightEntity, scheduleEntityId] of scheduleByLight) {
     const scheduleState = hass.states[scheduleEntityId];
     const scheduleAttrs = scheduleState?.attributes ?? {};
-    const lightState = hass.states[lightEntity];
-    const lightName =
-      (lightState?.attributes.friendly_name as string | undefined) ?? lightEntity;
+    // ChromaCal's own configured name (sensor.py's light_name attribute),
+    // NOT the underlying light entity's own friendly_name -- those can
+    // freely differ (e.g. a light named "Kitchen Lights" by its own
+    // integration, configured in ChromaCal as "Living Room Overhead
+    // Lights"). Reading the entity's friendly_name here silently showed
+    // the wrong name for any light renamed away from its entity's own
+    // name -- found live while visually verifying Phase 10's compact
+    // card. Falls back to the entity id only if the sensor hasn't
+    // reported yet, same as every other scheduleAttrs read below.
+    const lightName = (scheduleAttrs.light_name as string | undefined) ?? lightEntity;
 
     lights.push({
       lightEntity,

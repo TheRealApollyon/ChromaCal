@@ -1,7 +1,7 @@
 {
   "domain": "chromacal",
   "name": "ChromaCal",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "config_flow": true,
   "dependencies": ["sun", "http", "frontend"],
   "documentation": "https://github.com/TheRealApollyon/chromacal",

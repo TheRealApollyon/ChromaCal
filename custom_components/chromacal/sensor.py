@@ -90,6 +90,21 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             # role/scope attributes.
             "role": "schedule",
             "light_entity": schedule.light_entity,
+            # ChromaCal's own configured name for this light -- NOT the
+            # same thing as the underlying light entity's own
+            # friendly_name (that's whatever the light's own integration
+            # calls it, e.g. "Kitchen Lights", and can freely differ from
+            # what the user named it here). Only reachable before this
+            # otherwise via this entity's own composed name
+            # (f"{light_name} Schedule", has_entity_name-prefixed by the
+            # device name too) -- fragile to parse back out, so exposed
+            # directly instead. The panel/card were reading the light
+            # entity's friendly_name as a stand-in, which silently showed
+            # the wrong name for any light renamed away from its entity's
+            # own name -- found live while visually verifying Phase 10's
+            # compact card against a light named differently from its
+            # entity.
+            "light_name": schedule.light_name,
             "sunset_hour": schedule.sunset_hour,
             "schedule_end_time": _format_hour(schedule.schedule_end_hour),
             "segments": [

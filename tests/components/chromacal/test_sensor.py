@@ -69,6 +69,59 @@ async def test_sensor_created_for_configured_light(hass):
     # schedule_end_time: the light's configured off-time, exposed for the
     # panel's OFF/DAWN timeline marker -- see coordinator.py's LightSchedule.
     assert state.attributes["schedule_end_time"] == "23:00"
+    assert state.attributes["light_name"] == "Front Porch"
+
+
+async def test_light_name_attribute_is_the_configured_name_not_the_entity_friendly_name(hass):
+    """Regression test for a real bug found live during Phase 10's compact
+    card verification: the panel/card used to read the light entity's own
+    friendly_name for display, which silently showed the wrong name for
+    any light configured with a different name than its underlying
+    entity's own name. light_name must reflect what the user actually
+    typed into ChromaCal's config, not whatever the light's own
+    integration happens to call it."""
+    hass.states.async_set(
+        "sun.sun",
+        "above_horizon",
+        {"next_setting": "2026-12-25T20:00:00+00:00"},
+    )
+    # The entity's own name deliberately differs from ChromaCal's
+    # configured name for it -- the exact mismatch that exposed the bug.
+    hass.states.async_set("light.kitchen_lights", "off", {"friendly_name": "Kitchen Lights"})
+
+    entry_data = {
+        "region": "us",
+        "categories": {"federal": True},
+        "lights": [
+            {
+                "name": "Living Room Overhead Lights",
+                "zone": "",
+                "entity": "light.kitchen_lights",
+                "start_type": "sunset",
+                "start_time": "19:00",
+                "end_type": "time",
+                "end_time": "23:00",
+                "fade_in": 30,
+                "fade_out": 120,
+                "warmwhite_time": "22:00",
+                "warmwhite_enabled": True,
+            }
+        ],
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=entry_data, entry_id="test_name_mismatch")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    live_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = next(iter(live_entry.subentries.values()))
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"test_name_mismatch_{subentry.subentry_id}_schedule"
+    )
+    state = hass.states.get(entity_id)
+
+    assert state.attributes["light_name"] == "Living Room Overhead Lights"
 
 
 async def test_sensor_falls_back_gracefully_without_sun_entity(hass):
