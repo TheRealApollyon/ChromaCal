@@ -47,3 +47,13 @@ export interface HomeAssistant {
 export interface PanelInfo {
   config?: Record<string, unknown> | null;
 }
+
+/** setConfig()'s argument for the compact Lovelace card -- deliberately
+ * just `type` (the "custom:chromacal-card" string Lovelace itself always
+ * sends). No other fields: the card is zero-config by design, showing
+ * every configured light the same way buildViewModel() already
+ * self-discovers them for the panel -- see the plan discussion for why
+ * an entity-picker config was decided against for v1. */
+export interface ChromaCalCardConfig {
+  type: string;
+}

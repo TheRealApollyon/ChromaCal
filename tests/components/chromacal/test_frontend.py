@@ -84,3 +84,45 @@ async def test_panel_removed_on_unload(hass, freezer):
     await hass.async_block_till_done()
 
     assert not frontend.async_panel_exists(hass, PANEL_URL_PATH)
+
+
+async def test_card_module_registered_dashboard_wide_on_setup(hass, freezer):
+    """The compact card (Phase 10) needs its module loaded on every
+    frontend page, not just the panel's own route -- add_extra_js_url is
+    the real mechanism for that (confirmed against installed source),
+    pointed at the exact same module_url the panel itself uses so the
+    browser's module cache serves one shared instance."""
+    freezer.move_to("2026-07-25 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    await _setup_entry(hass, "test_card_module_registered")
+
+    panel = hass.data[frontend.DATA_PANELS][PANEL_URL_PATH]
+    module_url = panel.config["_panel_custom"]["module_url"]
+
+    # DATA_EXTRA_MODULE_URL is a UrlManager, not a plain collection --
+    # its actual url set lives on .urls (confirmed against installed
+    # source; the object itself isn't iterable/doesn't support `in`).
+    assert module_url in hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+
+
+async def test_card_module_removed_on_unload(hass, freezer):
+    freezer.move_to("2026-07-25 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_card_module_unload")
+
+    registered = {
+        url
+        for url in hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+        if url.startswith(f"{PANEL_STATIC_URL_BASE}/chromacal-panel.js")
+    }
+    assert registered
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    remaining = {
+        url
+        for url in hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+        if url.startswith(f"{PANEL_STATIC_URL_BASE}/chromacal-panel.js")
+    }
+    assert not remaining

@@ -1,8 +1,14 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import type { HomeAssistant, PanelInfo } from "./types";
-import { buildViewModel, type LightCardModel, type SkipModel, type UpcomingEventModel } from "./grouping";
+import type { ChromaCalCardConfig, HomeAssistant, PanelInfo } from "./types";
+import {
+  buildViewModel,
+  type LightCardModel,
+  type PanelViewModel,
+  type SkipModel,
+  type UpcomingEventModel,
+} from "./grouping";
 import { nativeThemeVars, presetThemeVars, PRESET_IDS, PRESET_LABELS, type PresetId } from "./theme";
 import { buildTimelineMarks, segmentPosition } from "./timeline";
 
@@ -176,14 +182,7 @@ export class ChromaCalPanel extends LitElement {
 
         <div class="page-grid ${this.narrow ? "narrow" : ""}">
           <main class="main-col">
-            ${model.lights.length === 0
-              ? html`<div class="empty-state">
-                  <p>No lights configured yet.</p>
-                  <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
-                </div>`
-              : html`<section class="light-grid ${this.narrow ? "narrow" : ""}">
-                  ${model.lights.map((light) => this._renderLightCard(light))}
-                </section>`}
+            ${this._renderLightGrid(model)}
 
             <section class="upcoming-section">
               <h2>Upcoming Events</h2>
@@ -442,6 +441,20 @@ export class ChromaCalPanel extends LitElement {
         )};`
       : "";
     return html`<div class="orb ${size} ${spinning ? "spinning" : ""}" style=${style}></div>`;
+  }
+
+  /** Shared by the full panel and the compact card (ChromaCalCard below) --
+   * the only piece of the panel a dashboard card actually wants. */
+  protected _renderLightGrid(model: PanelViewModel) {
+    if (model.lights.length === 0) {
+      return html`<div class="empty-state">
+        <p>No lights configured yet.</p>
+        <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
+      </div>`;
+    }
+    return html`<section class="light-grid ${this.narrow ? "narrow" : ""}">
+      ${model.lights.map((light) => this._renderLightCard(light))}
+    </section>`;
   }
 
   private _renderLightCard(light: LightCardModel) {
@@ -736,6 +749,17 @@ export class ChromaCalPanel extends LitElement {
         text-transform: uppercase;
         color: var(--cc-muted);
         margin-bottom: 4px;
+        /* Unlike .event-name-headline, this one truncates instead of
+           wrapping -- it's the quiet label, not the thing worth a second
+           line. Found live in a real Sections-view dashboard column
+           (narrower than the light-grid's own 300px minmax): a longer
+           light name wrapped to two lines here, making that row visibly
+           taller than its neighbors instead of staying a compact single
+           line -- exactly the readability check a DOM-only pass wouldn't
+           have caught. */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .event-name-headline {
@@ -1182,12 +1206,102 @@ export class ChromaCalPanel extends LitElement {
         display: flex;
         gap: 10px;
       }
+
+      /* ── Compact card mode (ChromaCalCard) -- <ha-card> supplies the
+         chrome (background/border/radius/elevation), just needs its own
+         content padding; .light-grid/.light-card.compact are unchanged
+         from the panel's own narrow-mode styles above. ── */
+      .card-content {
+        padding: 0 16px 16px;
+      }
     `,
   ];
 }
 
+/** Compact card mode -- a second entry point into the same component
+ * (see the plan discussion), not a separate build: same class hierarchy,
+ * same esbuild entry point/output file, registered under its own tag
+ * alongside the panel's. Reuses _renderLightGrid()/_renderLightCard()
+ * unchanged -- the narrow-mode compact row layout was already built for
+ * the panel's own mobile view, and is exactly what a dashboard card
+ * wants.
+ *
+ * Zero-config by design: buildViewModel() already self-discovers every
+ * configured light from hass.entities, so there's nothing for a user to
+ * pick. Only the light-grid renders here -- Upcoming Events and the skip
+ * sidebar stay full-panel-only content, reachable via the same "Manage
+ * Lights & Categories" link pattern already used elsewhere, not
+ * duplicated into a card.
+ *
+ * Deliberately always compact, not size-aware: HA's panel resolver feeds
+ * `narrow` based on the app shell's own viewport, but a Lovelace card
+ * gets no equivalent signal -- there's no such thing as "this card is
+ * narrow" independent of how wide a column the user happened to give it.
+ * This sets `narrow = true` unconditionally in the constructor rather
+ * than adding a ResizeObserver, so a card placed in a wide dashboard
+ * column still renders compact rows even with room to spare. A known,
+ * deliberate v1 limitation -- a size-aware version could layer on top of
+ * this later without touching the rendering it reuses.
+ */
+@customElement("chromacal-card")
+export class ChromaCalCard extends ChromaCalPanel {
+  constructor() {
+    super();
+    this.narrow = true;
+  }
+
+  // Required by the card contract (HA calls this on every config change),
+  // but there's nothing to store -- zero-config by design, see the class
+  // docstring. The parameter still has to be typed/accepted, not omitted,
+  // or Lovelace's own config validation for this card would reject any
+  // config object at all, including the {} getStubConfig() returns.
+  setConfig(_config: ChromaCalCardConfig): void {}
+
+  static getStubConfig(): Partial<ChromaCalCardConfig> {
+    return {};
+  }
+
+  getCardSize(): number {
+    if (!this.hass) return 1;
+    return Math.max(1, buildViewModel(this.hass).lights.length);
+  }
+
+  getGridOptions(): { rows: number; columns: number; min_rows: number } {
+    const rows = this.hass ? Math.max(1, buildViewModel(this.hass).lights.length) : 1;
+    // 6 of 12 columns is just a sensible starting default (half-width,
+    // a multiple of 3 per HA's own Sections-editor guidance) -- the user
+    // can freely resize it in the Sections view editor afterward.
+    return { rows, columns: 6, min_rows: 1 };
+  }
+
+  render() {
+    if (!this.hass) return nothing;
+    const model = buildViewModel(this.hass);
+    return html`
+      <ha-card header="ChromaCal">
+        <div class="card-content">${this._renderLightGrid(model)}</div>
+      </ha-card>
+    `;
+  }
+}
+
+// Bare tag name here, NOT "custom:chromacal-card" -- the custom: prefix
+// is a Lovelace YAML/UI-config convention users type to disambiguate from
+// HA's own built-in card types, not part of this registration object
+// (confirmed against HA's own minimal custom-card example).
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "chromacal-card",
+  name: "ChromaCal",
+  description: "Compact status for your ChromaCal lights.",
+});
+
 declare global {
   interface HTMLElementTagNameMap {
     "chromacal-panel": ChromaCalPanel;
+    "chromacal-card": ChromaCalCard;
+  }
+  interface Window {
+    customCards?: Array<{ type: string; name: string; description?: string }>;
   }
 }
