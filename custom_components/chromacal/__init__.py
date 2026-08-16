@@ -29,6 +29,13 @@ from homeassistant.helpers.event import async_track_time_change, async_track_tim
 from .const import (
     ATTR_COLORS,
     ATTR_EVENT_NAME,
+    ATTR_LIGHT_ENTITY,
+    ATTR_MARKER_ID,
+    ATTR_MODE,
+    ATTR_PATH,
+    ATTR_X,
+    ATTR_Y,
+    ATTR_Z,
     CONF_CATEGORIES,
     CONF_ENTITY,
     CONF_LIGHTS,
@@ -37,8 +44,12 @@ from .const import (
     DOMAIN,
     LIGHT_SUBENTRY_TYPE,
     MAX_COLOR_OVERRIDE_COLORS,
+    SERVICE_ADD_HOUSE_MARKER,
+    SERVICE_ASSIGN_HOUSE_MARKER,
+    SERVICE_REMOVE_HOUSE_MARKER,
     SERVICE_RESET_COLOR_OVERRIDE,
     SERVICE_SET_COLOR_OVERRIDE,
+    SERVICE_SET_HOUSE_VIEW,
     SERVICE_SET_TONIGHT_PICK,
 )
 from .coordinator import ChromaCalCoordinator
@@ -76,6 +87,30 @@ SET_COLOR_OVERRIDE_SCHEMA = vol.Schema(
 )
 
 RESET_COLOR_OVERRIDE_SCHEMA = vol.Schema({vol.Required(ATTR_EVENT_NAME): cv.string})
+
+_HOUSE_VIEW_MODE = vol.In(["2d", "3d"])
+
+SET_HOUSE_VIEW_SCHEMA = vol.Schema(
+    {vol.Required(ATTR_MODE): _HOUSE_VIEW_MODE, vol.Required(ATTR_PATH): cv.string}
+)
+
+ADD_HOUSE_MARKER_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MODE): _HOUSE_VIEW_MODE,
+        vol.Required(ATTR_X): vol.Coerce(float),
+        vol.Required(ATTR_Y): vol.Coerce(float),
+        vol.Optional(ATTR_Z): vol.Coerce(float),
+    }
+)
+
+ASSIGN_HOUSE_MARKER_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_MARKER_ID): cv.string,
+        vol.Optional(ATTR_LIGHT_ENTITY, default=None): vol.Any(cv.entity_id, None),
+    }
+)
+
+REMOVE_HOUSE_MARKER_SCHEMA = vol.Schema({vol.Required(ATTR_MARKER_ID): cv.string})
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -> bool:
@@ -192,6 +227,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
     async def _async_reset_color_override(call: ServiceCall) -> None:
         await coordinator.async_reset_color_override(call.data[ATTR_EVENT_NAME])
 
+    async def _async_set_house_view(call: ServiceCall) -> None:
+        await coordinator.async_set_house_view(call.data[ATTR_MODE], call.data[ATTR_PATH])
+
+    async def _async_add_house_marker(call: ServiceCall) -> None:
+        await coordinator.async_add_house_marker(
+            call.data[ATTR_MODE], call.data[ATTR_X], call.data[ATTR_Y], call.data.get(ATTR_Z)
+        )
+
+    async def _async_assign_house_marker(call: ServiceCall) -> None:
+        await coordinator.async_assign_house_marker(
+            call.data[ATTR_MARKER_ID], call.data[ATTR_LIGHT_ENTITY]
+        )
+
+    async def _async_remove_house_marker(call: ServiceCall) -> None:
+        await coordinator.async_remove_house_marker(call.data[ATTR_MARKER_ID])
+
     # Registered here, not async_setup, and guarded with has_service --
     # single_instance_allowed means there's only ever one entry to close
     # over, so there's no target/device_id resolution needed the way a
@@ -202,6 +253,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) ->
         (SERVICE_SET_TONIGHT_PICK, SET_TONIGHT_PICK_SCHEMA, _async_set_tonight_pick),
         (SERVICE_SET_COLOR_OVERRIDE, SET_COLOR_OVERRIDE_SCHEMA, _async_set_color_override),
         (SERVICE_RESET_COLOR_OVERRIDE, RESET_COLOR_OVERRIDE_SCHEMA, _async_reset_color_override),
+        (SERVICE_SET_HOUSE_VIEW, SET_HOUSE_VIEW_SCHEMA, _async_set_house_view),
+        (SERVICE_ADD_HOUSE_MARKER, ADD_HOUSE_MARKER_SCHEMA, _async_add_house_marker),
+        (SERVICE_ASSIGN_HOUSE_MARKER, ASSIGN_HOUSE_MARKER_SCHEMA, _async_assign_house_marker),
+        (SERVICE_REMOVE_HOUSE_MARKER, REMOVE_HOUSE_MARKER_SCHEMA, _async_remove_house_marker),
     ):
         if hass.services.has_service(DOMAIN, service_name):
             continue
@@ -222,6 +277,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ChromaCalConfigEntry) -
             SERVICE_SET_TONIGHT_PICK,
             SERVICE_SET_COLOR_OVERRIDE,
             SERVICE_RESET_COLOR_OVERRIDE,
+            SERVICE_SET_HOUSE_VIEW,
+            SERVICE_ADD_HOUSE_MARKER,
+            SERVICE_ASSIGN_HOUSE_MARKER,
+            SERVICE_REMOVE_HOUSE_MARKER,
         ):
             hass.services.async_remove(DOMAIN, service_name)
     return unloaded

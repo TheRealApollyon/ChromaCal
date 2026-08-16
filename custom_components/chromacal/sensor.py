@@ -38,7 +38,12 @@ async def async_setup_entry(
             [ChromaCalScheduleSensor(coordinator, entry.entry_id, light_entity)],
             config_subentry_id=schedule.subentry_id,
         )
-    async_add_entities([ChromaCalUpcomingEventsSensor(coordinator, entry.entry_id)])
+    async_add_entities(
+        [
+            ChromaCalUpcomingEventsSensor(coordinator, entry.entry_id),
+            ChromaCalHouseViewSensor(coordinator, entry.entry_id),
+        ]
+    )
 
 
 def _format_hour(hour: float) -> str:
@@ -182,4 +187,36 @@ class ChromaCalUpcomingEventsSensor(CoordinatorEntity[ChromaCalCoordinator], Sen
             "color_overrides": {
                 name: list(colors) for name, colors in self.coordinator.color_overrides.items()
             },
+        }
+
+
+class ChromaCalHouseViewSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEntity):
+    """House View's config -- global, not per-light, same reasoning as
+    ChromaCalUpcomingEventsSensor above: one 2D image or 3D model with
+    markers on it applies across every configured light, not one per
+    light. Native value is the marker count (something legible at a
+    glance); the mode/path/full marker list live in extra_state_attributes
+    for the panel's House View section.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "House View"
+    _attr_icon = "mdi:floor-plan"
+
+    def __init__(self, coordinator: ChromaCalCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_house_view"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.house_view_markers)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "role": "house_view",
+            "mode": self.coordinator.house_view_mode,
+            "path": self.coordinator.house_view_path,
+            "markers": list(self.coordinator.house_view_markers),
         }

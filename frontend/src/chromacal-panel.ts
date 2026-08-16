@@ -37,6 +37,7 @@ export class ChromaCalPanel extends LitElement {
   @state() private _skipFilter = "";
   @state() private _manageSkipsOpen = false;
   @state() private _controlsOpen = false;
+  @state() private _houseViewOpen = false;
 
   /** Color Override modal state -- null means closed. There's no other
    * modal infrastructure in this panel yet (Tonight's Pick needed none,
@@ -86,6 +87,19 @@ export class ChromaCalPanel extends LitElement {
 
   private _toggleSwitch(entityId: string | null, isOn: boolean): void {
     this._callService("switch", isOn ? "turn_off" : "turn_on", entityId);
+  }
+
+  /** House View's Three.js/GLTFLoader/OrbitControls weight (~800KB
+   * minified) lives in its own code-split chunk (see esbuild.config.mjs)
+   * and is never imported at module scope -- this dynamic import() is the
+   * only thing that ever pulls it in, and only fires the first time this
+   * section is actually opened. Fire-and-forget: the custom element
+   * upgrades automatically once its module registers it, even if
+   * `<chromacal-house-view>` already rendered a beat earlier. */
+  private _onHouseViewToggle(e: Event): void {
+    const open = (e.target as HTMLDetailsElement).open;
+    this._houseViewOpen = open;
+    if (open) void import("./house-view.js");
   }
 
   private _setTonightPick(eventName: string): void {
@@ -192,6 +206,21 @@ export class ChromaCalPanel extends LitElement {
                     ${model.upcomingEvents.map((event) => this._renderUpcomingRow(event))}
                   </div>`}
             </section>
+
+            <details
+              class="collapsible-section house-view-section"
+              ?open=${this._houseViewOpen}
+              @toggle=${this._onHouseViewToggle}
+            >
+              <summary>House View</summary>
+              ${this._houseViewOpen
+                ? html`<chromacal-house-view
+                    .hass=${this.hass}
+                    .model=${model.houseView}
+                    .lights=${model.lights}
+                  ></chromacal-house-view>`
+                : nothing}
+            </details>
           </main>
 
           <aside class="side-col">

@@ -9,9 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "lit": "^3.2.1"
+    "lit": "^3.2.1",
+    "three": "^0.185.1"
   },
   "devDependencies": {
+    "@types/three": "^0.185.4",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.3"
   }

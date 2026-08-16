@@ -376,6 +376,115 @@ installs and the automated test suite depend on. Slower to set up than a
 clock trick would have been if one had worked, but the only one of the
 three approaches that actually did.
 
+## Lit gotcha — imperative DOM writes inside a Lit-templated container corrupt its diffing
+
+Symptom (Phase 11, House View's 3D mode): the panel throws
+`Uncaught (in promise) TypeError: Cannot read properties of null (reading
+'nextSibling')` deep inside Lit's own bundled internals, with no stack
+frame pointing at any of this project's own code. Intermittent-looking --
+triggered by a later, unrelated re-render (e.g. a `_loading` state flip),
+not by the code that actually caused it.
+
+Cause: a Lit template had a host div (`#viewer-3d-host`) that was BOTH (a)
+templated with Lit-managed conditional children (`${...}` expressions for
+a placeholder/loading overlay) AND (b) the target of an imperative
+`host.replaceChildren(renderer.domElement)` call mounting Three.js's own
+canvas. `replaceChildren()` wipes out the comment-node markers lit-html
+placed there to track those `${...}` regions, invisibly to Lit. The next
+time Lit tries to patch that container (any re-render touching it, however
+unrelated), it dereferences a marker node that no longer exists and
+throws.
+
+Fix: any element that a non-Lit library mounts into imperatively must be
+Lit-opaque -- a bare, unconditional, childless element from Lit's own
+template's point of view (`<div id="viewer-3d-host"></div>`, no `${...}`
+inside it, ever). Put overlays that need to react to state as absolutely-
+positioned siblings instead, not children of the imperatively-owned div.
+
+## Frontend gotcha — a private class field mutated inside a lifecycle hook's own cleanup path can defeat its own guard
+
+Symptom (Phase 11): House View's 3D mode fetched the same `.glb` URL in a
+tight, silent loop -- dozens of identical requests, no thrown error, no
+console output, only visible via `read_network_requests`.
+
+Cause: a re-entrancy guard field (`_loaded3dPath`, set to the
+currently-loading path at the top of the load method specifically so a
+later reactive re-render wouldn't re-trigger it) was being reset back to
+`null` by a *different* method further down the same call stack
+(`_initScene()`'s call to `_disposeScene()`, meant only to tear down a
+*previous* Three.js scene before building a new one) -- silently erasing
+the guard the load method had just set, so the very next reactive update
+saw "nothing loaded yet" and restarted the load. Two independent, correct-
+looking pieces of cleanup code, each reasonable on its own, together
+undid a guard neither one owned.
+
+Fix: a re-entrancy/identity guard field must have exactly one method
+responsible for clearing it (here: only the load method itself, on
+success or failure) -- audit every other place that touches the same
+field, not just the code path that sets it, when this class of bug is
+suspected.
+
+## Browser-tool gotcha — a disposable container needs a published port, not just `preview_start url:`
+
+Symptom: `preview_start` with `url: "http://<container-bridge-IP>:8123"`
+reports success, but every subsequent `navigate`/`computer` call fails or
+times out with no useful DOM.
+
+Cause: `docker run` without `-p 8123:8123` leaves the container reachable
+only from other containers on the same Docker bridge network (confirmed
+via `docker exec ... curl localhost:8123` succeeding) -- not from the host,
+and not from whatever network context the Browser pane's underlying
+browser actually runs in. `preview_start`'s `url` parameter doesn't grant
+new network reachability; it only points an already-reachable browser at
+an address.
+
+Fix: publish the port explicitly (`-p 8123:8123`) when a disposable HA
+container needs to be driven by the Browser pane tools, not just `docker
+exec`'d into. If credentials for that instance aren't known (e.g. a
+container recreated fresh, or from an earlier session), force fresh
+onboarding by removing exactly `.storage/auth`, `.storage/http.auth`, and
+`.storage/onboarding` and restarting -- this does NOT touch
+`.storage/core.config_entries`, so the actual integration config (schedules,
+House View markers, etc.) survives untouched; only login state resets.
+
+## Frontend gotcha — a reactive property's stale-across-mode-switch error state, and the trap in "fixing" it
+
+Symptom (Phase 11, House View): switching between 2D and 3D mode after one
+of them failed to load left the OTHER mode's stale error banner visible
+next to a since-successfully-loaded, unrelated image/model -- a real trust
+problem (a user sees "could not load" next to something that plainly did
+load), caught by user review of screenshots, not by any automated check.
+
+Cause: `_loadError` was a single `@state()` slot shared by both modes
+(matching the single shared `path`/`mode` in the data model), but nothing
+ever cleared it when the mode actually changed -- only a fresh load
+attempt's own start/success/failure touched it, so a stale message from
+one mode outlived a switch to the other.
+
+Fix: clear it reactively in `willUpdate()` whenever `changed.get("model")`
+(the previous value) and `this.model` (the new value) disagree on `.mode`
+-- covers a mode change from any source, not just this component's own
+buttons -- plus an optimistic clear in the click handler itself for
+instant feedback ahead of the round trip through `hass`.
+
+**The trap**: fixing an adjacent, superficially similar complaint --
+"clicking Load again with the exact same path silently does nothing" --
+by resetting the `_loaded3dPath` re-entrancy guard inside `_loadModel`'s
+own failure `catch` block seemed reasonable in isolation, but turned a
+single failed load into an *unbounded* retry loop: the guard being clear
+after every failure meant the very next unrelated reactive update (a
+`hass` tick, a marker sync) re-triggered the same doomed load again,
+forever. Caught live via `read_network_requests` showing dozens of
+identical requests to a path that had never changed. The correct fix
+moved the guard-reset into `_setHouseView()` instead -- the single
+chokepoint every explicit user action (Load click, mode toggle) already
+funnels through -- so a retry only ever happens once per real user
+action, never automatically. General lesson: when a guard field exists
+specifically to prevent an automatic retrigger, only code paths reachable
+from an explicit user action should ever be allowed to clear it -- not a
+failure handler, which is reachable from the automatic path the guard
+exists to bound.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday

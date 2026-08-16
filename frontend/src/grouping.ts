@@ -110,6 +110,36 @@ interface RawUpcomingAttrs {
   color_overrides?: Record<string, string[]>;
 }
 
+/** A marker placed on House View's 2D image or 3D model -- see sensor.py's
+ * ChromaCalHouseViewSensor. Keyed by a generated `id` (and `lightEntity`
+ * for assignment), NOT list position -- see coordinator.py's
+ * CONF_HOUSE_VIEW_MARKERS for why that matters here specifically. */
+export interface HouseViewMarker {
+  id: string;
+  mode: "2d" | "3d";
+  x: number;
+  y: number;
+  z: number | null;
+  lightEntity: string | null;
+}
+
+/** The wire shape of one entry in the House View sensor's `markers`
+ * attribute -- see sensor.py's ChromaCalHouseViewSensor. */
+interface RawHouseViewMarker {
+  id: string;
+  mode: "2d" | "3d";
+  x: number;
+  y: number;
+  z: number | null;
+  light_entity: string | null;
+}
+
+export interface HouseViewModel {
+  mode: "2d" | "3d";
+  path: string;
+  markers: HouseViewMarker[];
+}
+
 export interface GlobalControlsModel {
   saluteEntityId: string | null;
   saluteRunning: boolean;
@@ -125,6 +155,7 @@ export interface PanelViewModel {
   tonightSkips: SkipModel[];
   permanentSkips: SkipModel[];
   upcomingEvents: UpcomingEventModel[];
+  houseView: HouseViewModel;
 }
 
 function ownEntityIds(hass: HomeAssistant): string[] {
@@ -154,6 +185,7 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
   const tonightSkips: SkipModel[] = [];
   const permanentSkips: SkipModel[] = [];
   let upcomingEventsEntityId: string | null = null;
+  let houseViewEntityId: string | null = null;
 
   for (const entityId of ids) {
     const state = hass.states[entityId];
@@ -196,6 +228,8 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
     if (domain === "sensor") {
       if (attrs.role === "upcoming_events") {
         upcomingEventsEntityId = entityId;
+      } else if (attrs.role === "house_view") {
+        houseViewEntityId = entityId;
       } else if (typeof attrs.light_entity === "string") {
         scheduleByLight.set(attrs.light_entity, entityId);
       }
@@ -261,5 +295,21 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
     overrideColors: colorOverrides[e.name] ?? null,
   }));
 
-  return { globals, lights, tonightSkips, permanentSkips, upcomingEvents };
+  const houseViewAttrs = (houseViewEntityId
+    ? hass.states[houseViewEntityId]?.attributes
+    : undefined) as { mode?: "2d" | "3d"; path?: string; markers?: RawHouseViewMarker[] } | undefined;
+  const houseView: HouseViewModel = {
+    mode: houseViewAttrs?.mode ?? "2d",
+    path: houseViewAttrs?.path ?? "",
+    markers: (houseViewAttrs?.markers ?? []).map((m) => ({
+      id: m.id,
+      mode: m.mode,
+      x: m.x,
+      y: m.y,
+      z: m.z,
+      lightEntity: m.light_entity,
+    })),
+  };
+
+  return { globals, lights, tonightSkips, permanentSkips, upcomingEvents, houseView };
 }

@@ -23,3 +23,64 @@ reset_color_override:
       required: true
       selector:
         text:
+
+set_house_view:
+  fields:
+    mode:
+      required: true
+      selector:
+        select:
+          options:
+            - "2d"
+            - "3d"
+    path:
+      required: true
+      selector:
+        text:
+
+add_house_marker:
+  fields:
+    mode:
+      required: true
+      selector:
+        select:
+          options:
+            - "2d"
+            - "3d"
+    x:
+      required: true
+      selector:
+        number:
+          mode: box
+          step: any
+    y:
+      required: true
+      selector:
+        number:
+          mode: box
+          step: any
+    z:
+      required: false
+      selector:
+        number:
+          mode: box
+          step: any
+
+assign_house_marker:
+  fields:
+    marker_id:
+      required: true
+      selector:
+        text:
+    light_entity:
+      required: false
+      selector:
+        entity:
+          domain: light
+
+remove_house_marker:
+  fields:
+    marker_id:
+      required: true
+      selector:
+        text:

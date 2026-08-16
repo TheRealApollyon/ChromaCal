@@ -110,6 +110,34 @@ ATTR_COLORS = "colors"
 # Matches v1's chip-list cap in the color-override modal.
 MAX_COLOR_OVERRIDE_COLORS = 6
 
+# ── House View (Phase 11) ─────────────────────────────────────────
+# A 2D image or 3D model with light markers on it, matching v1's House
+# View. Persisted the same way as CONF_COLOR_OVERRIDES above -- a user's
+# house image/model path and marker layout are configuration they set once
+# and expect to survive restarts, not per-session runtime state.
+CONF_HOUSE_VIEW_MODE = "house_view_mode"
+CONF_HOUSE_VIEW_PATH = "house_view_path"
+# list[dict] shape: {id, mode, x, y, z, light_entity}. Keyed by a generated
+# id and light_entity, NOT list position like v1's CFG.houseView.markers --
+# v1's browser-local single-client model made index-splicing safe; v2's
+# WebSocket-synced, potentially-multi-client model doesn't have that
+# guarantee, and the light_name attribute bug already showed positional/
+# name-based joins drift where entity-id joins don't.
+CONF_HOUSE_VIEW_MARKERS = "house_view_markers"
+
+SERVICE_SET_HOUSE_VIEW = "set_house_view"
+SERVICE_ADD_HOUSE_MARKER = "add_house_marker"
+SERVICE_ASSIGN_HOUSE_MARKER = "assign_house_marker"
+SERVICE_REMOVE_HOUSE_MARKER = "remove_house_marker"
+
+ATTR_MODE = "mode"
+ATTR_PATH = "path"
+ATTR_X = "x"
+ATTR_Y = "y"
+ATTR_Z = "z"
+ATTR_MARKER_ID = "marker_id"
+ATTR_LIGHT_ENTITY = "light_entity"
+
 DEFAULT_START_TIME = "19:00"
 DEFAULT_END_TIME = "23:00"
 DEFAULT_FADE_IN = 30

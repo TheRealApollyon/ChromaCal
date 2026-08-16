@@ -45,6 +45,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import uuid
 from collections.abc import Callable, Coroutine, Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -62,6 +63,9 @@ from .const import (
     CONF_COLOR_OVERRIDES,
     CONF_EMERGENCY_WAS_ACTIVE,
     CONF_ENTITY,
+    CONF_HOUSE_VIEW_MARKERS,
+    CONF_HOUSE_VIEW_MODE,
+    CONF_HOUSE_VIEW_PATH,
     CONF_NAME,
     CONF_SKIPPED_EVENTS,
     CONF_SUBENTRY_ID,
@@ -196,6 +200,16 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             name: tuple(colors)
             for name, colors in entry.options.get(CONF_COLOR_OVERRIDES, {}).items()
         }
+        # House View (Phase 11): matches v1's CFG.houseView, persisted like
+        # color_overrides above -- a standing setting, not per-session
+        # state. See CONF_HOUSE_VIEW_MARKERS for why markers are keyed by a
+        # generated id + light_entity rather than v1's list-position
+        # lightIndex.
+        self.house_view_mode: str = entry.options.get(CONF_HOUSE_VIEW_MODE, "2d")
+        self.house_view_path: str = entry.options.get(CONF_HOUSE_VIEW_PATH, "")
+        self.house_view_markers: list[dict[str, Any]] = [
+            dict(marker) for marker in entry.options.get(CONF_HOUSE_VIEW_MARKERS, [])
+        ]
         # Skip-tonight: matches v1's CFG.tonightSkips, but flattened to a
         # single in-memory set + a date guard (the coordinator only ever
         # cares about *today's* key) rather than v1's date-keyed dict of
@@ -426,6 +440,67 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
                 CONF_COLOR_OVERRIDES: {k: list(v) for k, v in self.color_overrides.items()},
             },
         )
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    def _persist_house_view(self) -> None:
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={
+                **self._entry.options,
+                CONF_HOUSE_VIEW_MODE: self.house_view_mode,
+                CONF_HOUSE_VIEW_PATH: self.house_view_path,
+                CONF_HOUSE_VIEW_MARKERS: self.house_view_markers,
+            },
+        )
+
+    async def async_set_house_view(self, mode: str, path: str) -> None:
+        """Set which file House View points to and how to render it --
+        matches v1's setHouseMode()/loadHouseFile()."""
+        self.house_view_mode = mode
+        self.house_view_path = path
+        self._persist_house_view()
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    async def async_add_house_marker(
+        self, mode: str, x: float, y: float, z: float | None
+    ) -> None:
+        """Drop a new, unassigned marker -- matches v1's addMarker(). Uses
+        a generated id rather than list position -- see
+        CONF_HOUSE_VIEW_MARKERS for why."""
+        self.house_view_markers.append(
+            {
+                "id": uuid.uuid4().hex,
+                "mode": mode,
+                "x": x,
+                "y": y,
+                "z": z,
+                "light_entity": None,
+            }
+        )
+        self._persist_house_view()
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    async def async_assign_house_marker(
+        self, marker_id: str, light_entity: str | None
+    ) -> None:
+        """Assign (or, if light_entity is None, clear) which light a
+        marker represents -- matches v1's assignMarkerLight(). Silently a
+        no-op for an unknown marker_id, same idiom as
+        async_reset_color_override's pop(..., None) above (e.g. a second,
+        racing removal)."""
+        for marker in self.house_view_markers:
+            if marker["id"] == marker_id:
+                marker["light_entity"] = light_entity
+                break
+        self._persist_house_view()
+        await self.async_refresh()  # same reasoning as async_set_permanent_skip above
+
+    async def async_remove_house_marker(self, marker_id: str) -> None:
+        """Matches v1's removeMarker()."""
+        self.house_view_markers = [
+            marker for marker in self.house_view_markers if marker["id"] != marker_id
+        ]
+        self._persist_house_view()
         await self.async_refresh()  # same reasoning as async_set_permanent_skip above
 
     def _is_overridden(self, light_entity: str) -> bool:
