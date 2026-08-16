@@ -1,0 +1,11 @@
+#!/bin/sh
+PATTERN='(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3}|C:\\Users\\shane)'
+
+if git diff --cached | grep -E "$PATTERN"; then
+    echo ""
+    echo "BLOCKED: This commit contains what looks like a private IP address or local file path."
+    echo "Review the lines above. If this is intentional, use: git commit --no-verify"
+    exit 1
+fi
+
+exit 0
