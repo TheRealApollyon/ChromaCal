@@ -106,7 +106,18 @@ ADD_HOUSE_MARKER_SCHEMA = vol.Schema(
 ASSIGN_HOUSE_MARKER_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_MARKER_ID): cv.string,
-        vol.Optional(ATTR_LIGHT_ENTITY, default=None): vol.Any(cv.entity_id, None),
+        # cv.entity_domain("light"), not the looser cv.entity_id -- a
+        # marker's whole purpose is representing one of ChromaCal's own
+        # configured lights, and the picker in the UI already only ever
+        # offers those. cv.entity_id alone accepted any entity_id in the
+        # instance regardless of domain (confirmed against real HA core
+        # source during the security review this closes: entity_domain()
+        # still validates entity_id shape via entities_domain() ->
+        # entity_ids(), then additionally rejects anything outside the
+        # given domain).
+        vol.Optional(ATTR_LIGHT_ENTITY, default=None): vol.Any(
+            cv.entity_domain("light"), None
+        ),
     }
 )
 

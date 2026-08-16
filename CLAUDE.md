@@ -540,6 +540,61 @@ running container did. One more entry in this file's running tally of
 things live verification catches that automated tests structurally
 cannot.
 
+## Security review (post-Phase 11) — findings, so this doesn't need re-deriving
+
+A targeted audit of the v2 integration ahead of wider distribution,
+checked from source and confirmed live where code-reading alone
+couldn't settle it (same "confirm what actually happens" discipline as
+everything else in this file). Full detail lives in the conversation
+history if it's ever needed again; this is the standing summary.
+
+- **`house_view_path` traversal/SSRF: not exploitable, confirmed live.**
+  The Python backend never touches this string as a filesystem path --
+  it's opaque config-entry storage, republished as-is. It's a pure
+  client-side URL. Live-tested `/local/../../../../etc/passwd` (browser
+  resolved it to `/etc/passwd`, real 404), `/local/../.storage/core.config_entries`
+  (real 404 -- `.storage` isn't a served route regardless of path
+  games), and a direct curl bypassing browser URL normalization
+  entirely against `/chromacal_static/../../etc/passwd` (aiohttp's own
+  static-resource traversal guard: 404). No CSP header is set, so a
+  same-origin admin's browser *would* issue a real cross-origin request
+  for an external URL, but cross-origin requests never carry the HA
+  session cookie -- no credential leak, and this matches v1's original
+  unrestricted "point at any image/model" design, not a new gap.
+- **XSS: confirmed clean, live.** Set `house_view_path` to
+  `"><img src=x onerror=window.__xss_fired=true>` and inspected the
+  real DOM: Lit HTML-entity-encoded the entire payload into the
+  existing `<img>`'s `src` attribute value; the injected handler never
+  fired. Grepped all of `frontend/src` for `unsafeHTML`/`innerHTML`/
+  `dangerouslySetInnerHTML`/`eval(` -- zero matches anywhere.
+- **Service entity scoping: one real gap, now fixed.**
+  `assign_house_marker`'s `light_entity` field accepted any
+  syntactically-valid entity_id in the whole HA instance (`cv.entity_id`
+  checks shape only, not domain) -- the UI picker only ever offered
+  ChromaCal's own lights, but the service itself didn't enforce that.
+  Fixed with `cv.entity_domain("light")` (confirmed against real HA
+  core source that it still validates entity_id shape via
+  `entities_domain()` -> `entity_ids()`, plus rejects anything outside
+  the given domain). `set_tonight_pick`/`set_color_override`'s
+  `event_name` free-text looseness (Phase 9) was deliberately left
+  as-is -- a consistency question needing one deliberate pass across
+  every service schema at once, not a partial fix bundled into this
+  review.
+- **Dashboard-wide bundle (`chromacal-panel.js`, loaded on every page
+  via `add_extra_js_url`): confirmed clean by reading the actual built
+  output**, not just source -- zero `fetch`/`XMLHttpRequest`/
+  `WebSocket`/`sendBeacon`/telemetry anywhere in it; only `localStorage`
+  (the already-known theme-preference persistence). The only `fetch(`
+  calls in the whole `panel_dist/` tree are three.js's own loader code
+  in the lazily-loaded 3D chunk, which only loads when 3D mode is
+  actually used.
+- **`StaticPathConfig`**: scoped to a fixed, non-configurable
+  `panel_dist/` path, nothing wider.
+- **Credentials/secrets**: none introduced -- grepped the entire House
+  View diff (all 24 files, including built JS) for
+  password/token/secret/api_key/credential/bearer; zero hits in
+  application code.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday

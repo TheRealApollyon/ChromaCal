@@ -11,6 +11,8 @@ extra_state_attributes the same way.
 
 from __future__ import annotations
 
+import pytest
+import voluptuous as vol
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -124,6 +126,35 @@ async def test_assign_unknown_marker_id_is_a_silent_no_op(hass):
 
     await coordinator.async_remove_house_marker("does-not-exist")
     assert coordinator.house_view_markers == []
+
+
+async def test_assign_house_marker_rejects_non_light_entity(hass):
+    """Security-review finding: assign_house_marker's light_entity used to
+    accept any syntactically-valid entity_id in the instance (cv.entity_id
+    alone doesn't check domain), even though a marker only ever means
+    "one of ChromaCal's own configured lights" and the UI picker already
+    only ever offers those. Now constrained with cv.entity_domain("light")."""
+    entry = await _setup_entry(hass, "test_house_view_wrong_domain")
+    coordinator = entry.runtime_data
+    await coordinator.async_add_house_marker("2d", 0.1, 0.2, None)
+    marker_id = coordinator.house_view_markers[0]["id"]
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASSIGN_HOUSE_MARKER,
+            {ATTR_MARKER_ID: marker_id, ATTR_LIGHT_ENTITY: "switch.chromacal_emergency_mode"},
+            blocking=True,
+        )
+
+    # A real light entity is still accepted.
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASSIGN_HOUSE_MARKER,
+        {ATTR_MARKER_ID: marker_id, ATTR_LIGHT_ENTITY: LIGHT_ENTITY},
+        blocking=True,
+    )
+    assert coordinator.house_view_markers[0]["light_entity"] == LIGHT_ENTITY
 
 
 async def test_house_view_survives_reload(hass):
