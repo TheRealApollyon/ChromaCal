@@ -466,17 +466,25 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
     ) -> None:
         """Drop a new, unassigned marker -- matches v1's addMarker(). Uses
         a generated id rather than list position -- see
-        CONF_HOUSE_VIEW_MARKERS for why."""
-        self.house_view_markers.append(
-            {
-                "id": uuid.uuid4().hex,
-                "mode": mode,
-                "x": x,
-                "y": y,
-                "z": z,
-                "light_entity": None,
-            }
-        )
+        CONF_HOUSE_VIEW_MARKERS for why.
+
+        Rebuilds the list fresh (`[*old, new]`) rather than `.append()`,
+        matching `async_assign_house_marker`'s reasoning -- `.append()`
+        happens to be safe today only because it changes the list's
+        length, which the state machine's equality check catches
+        incidentally, not because anything here is actually disciplined
+        about rebuilding. Closing that "safe by accident" gap now rather
+        than leaving it as the one remaining spot in this codebase
+        relying on it."""
+        new_marker = {
+            "id": uuid.uuid4().hex,
+            "mode": mode,
+            "x": x,
+            "y": y,
+            "z": z,
+            "light_entity": None,
+        }
+        self.house_view_markers = [*self.house_view_markers, new_marker]
         self._persist_house_view()
         await self.async_refresh()  # same reasoning as async_set_permanent_skip above
 
