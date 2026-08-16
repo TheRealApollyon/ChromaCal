@@ -485,6 +485,61 @@ from an explicit user action should ever be allowed to clear it -- not a
 failure handler, which is reachable from the automatic path the guard
 exists to bound.
 
+## Backend gotcha — mutating a dict already inside `hass.states` in place silently suppresses the update it's supposed to announce
+
+Symptom (Phase 11, House View's `assign_house_marker`): the config
+entry's persisted options were always correct (confirmed by reading
+`.storage/core.config_entries` directly), but the sensor's exposed
+`markers` attribute stayed stale in the live UI indefinitely -- no error,
+no exception in the log, reproducible in isolation (a single, solitary
+service call, no races), fixed only by a full container restart. Two
+sibling methods (`add_house_marker`, `remove_house_marker`) using what
+looked like the identical pattern (mutate coordinator state, persist,
+`await self.async_refresh()`) worked live every time.
+
+Root cause, confirmed by reading the actual installed HA core source
+(not assumed): `sensor.py`'s `extra_state_attributes` only *shallow*-copies
+the markers list (`list(self.coordinator.house_view_markers)`) -- the
+dicts inside it are the same objects HA's state machine ends up holding
+as the "old" state's attributes (nothing between the coordinator and
+`hass.states.async_set_internal` deep-copies anything: `entity.py`'s
+`attr |= extra_state_attributes` merges by reference, and `core.py`'s
+`State.__init__` does `self.attributes = ReadOnlyDict(attributes or {})`
+-- a read-only *wrapper*, not a copy). `async_assign_house_marker` did
+`marker["light_entity"] = light_entity` on a dict already living inside
+that shared list -- an in-place mutation that retroactively edits the
+"old" state's stored snapshot too, since it's the literal same object.
+By the time `core.py`'s own dedup check (`old_state.attributes ==
+attributes` in `async_set_internal`) runs, both sides already show the
+identical (already-mutated) value, so it takes the early-return
+"nothing changed" branch and never fires `state_changed` -- a real value
+change with no event to announce it. `add_house_marker` never hit this
+because `.append()` changes the list's *length* (caught by `==`
+immediately, regardless of object identity); `remove_house_marker`
+never hit it because its list comprehension rebuilds an entirely new
+list (also a length change). Both were "safe by accident," not by
+discipline -- worth checking for elsewhere before assuming a similar
+in-place mutation is fine just because nothing broke yet.
+
+Fix: never mutate a dict/list that a sensor's `extra_state_attributes`
+exposes by (shallow) reference -- rebuild a new container instead, even
+for a single-field change (`{**marker, "field": new_value}` inside a
+fresh list comprehension, not `marker["field"] = new_value` on an
+existing entry). The persisted-options write and the live state push are
+two entirely independent paths in this codebase (`_persist_house_view()`
+vs. `async_refresh()`'s listener notification) -- a bug in one gives zero
+signal that the other is also broken, so "the data on disk is correct"
+is not evidence the live UI is too.
+
+Automated tests did not catch this even though they use HA's own real
+core internals (`pytest_homeassistant_custom_component`, not a mock) --
+confirmed by running `test_house_view.py` against the pre-fix code
+directly: all 8 tests passed regardless. The test fixture's state
+lifecycle doesn't reproduce whatever timing this needs; only a real
+running container did. One more entry in this file's running tally of
+things live verification catches that automated tests structurally
+cannot.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday

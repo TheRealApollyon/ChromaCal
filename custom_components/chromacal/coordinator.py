@@ -487,11 +487,28 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         marker represents -- matches v1's assignMarkerLight(). Silently a
         no-op for an unknown marker_id, same idiom as
         async_reset_color_override's pop(..., None) above (e.g. a second,
-        racing removal)."""
-        for marker in self.house_view_markers:
-            if marker["id"] == marker_id:
-                marker["light_entity"] = light_entity
-                break
+        racing removal).
+
+        Rebuilds a new list containing a new dict for the matched marker,
+        rather than mutating the existing dict in place -- mutating in
+        place left `sensor.py`'s exposed `markers` attribute permanently
+        stale until the next restart. Root cause, confirmed against real
+        HA core source: `extra_state_attributes` only shallow-copies the
+        list (`list(self.house_view_markers)`), so the marker dicts inside
+        it are the SAME objects HA's state machine ends up holding as the
+        "old" state's attributes. An in-place mutation retroactively edits
+        that stored "old" snapshot too, so `core.py`'s own
+        `old_state.attributes == attributes` dedup check in
+        `async_set_internal` sees no difference and never fires
+        `state_changed` -- a real value change with no event to announce
+        it. `add`/`remove` never hit this: `add` appends a new dict (list
+        length differs), `remove` rebuilds the whole list (length differs
+        again) -- only an in-place same-length, same-identity mutation is
+        invisible to that check."""
+        self.house_view_markers = [
+            {**marker, "light_entity": light_entity} if marker["id"] == marker_id else marker
+            for marker in self.house_view_markers
+        ]
         self._persist_house_view()
         await self.async_refresh()  # same reasoning as async_set_permanent_skip above
 
