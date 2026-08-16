@@ -1,0 +1,22 @@
+name: Validate
+
+# Runs the same validation HACS itself performs on submission, so a
+# failure surfaces here instead of during a real HACS submission
+# attempt. Per hacs.xyz/docs/publish/action/.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  validate-hacs:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: HACS validation
+        uses: "hacs/action@main"
+        with:
+          category: "integration"
