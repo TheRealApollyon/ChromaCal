@@ -1,10 +1,32 @@
 #!/bin/sh
-PATTERN='(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3}|C:\\Users\\shane)'
+# Blocks commits containing secrets, private IPs, or local file paths.
+# Scans staged changes with gitleaks (default secret-detection ruleset
+# plus custom rules in .gitleaks.toml for RFC1918 IPs and Windows
+# user-profile paths) instead of a hand-rolled pattern list, so coverage
+# tracks gitleaks' maintained rules too, not just what we thought to add.
+#
+# Uses a local gitleaks binary if present, otherwise falls back to the
+# zricethezav/gitleaks Docker image.
 
-if git diff --cached | grep -E "$PATTERN"; then
+REPO_DIR="$(pwd -W 2>/dev/null || pwd)"
+
+if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks protect --staged --redact --config .gitleaks.toml -v
+    status=$?
+else
+    # MSYS_NO_PATHCONV: Git for Windows' bundled shell auto-rewrites
+    # leading-slash args as if they were Windows paths (e.g. "/repo"
+    # becomes something like "D:/Git/repo"), which breaks the container's
+    # -w/-v destination paths. Disable that rewriting for this call only.
+    MSYS_NO_PATHCONV=1 docker run --rm -v "$REPO_DIR:/repo" -w /repo zricethezav/gitleaks:latest \
+        protect --staged --redact --config .gitleaks.toml -v
+    status=$?
+fi
+
+if [ "$status" -ne 0 ]; then
     echo ""
-    echo "BLOCKED: This commit contains what looks like a private IP address or local file path."
-    echo "Review the lines above. If this is intentional, use: git commit --no-verify"
+    echo "BLOCKED: gitleaks found what looks like a secret, private IP, or local path in this commit."
+    echo "Review the output above. If this is intentional, use: git commit --no-verify"
     exit 1
 fi
 

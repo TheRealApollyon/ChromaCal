@@ -1,0 +1,22 @@
+title = "ChromaCal gitleaks config"
+
+# Start from gitleaks' maintained default ruleset (API keys, tokens,
+# private keys, etc.) and layer on custom rules for the things that
+# matter specifically to this repo's standing no-real-local-values
+# policy: RFC1918 private IPs and absolute Windows user-profile paths.
+# Neither of those is a "secret" in gitleaks' default sense, so they'd
+# otherwise go unscanned.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "private-ipv4-address"
+description = "RFC1918 private IPv4 address"
+regex = '''\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b'''
+tags = ["ip", "custom"]
+
+[[rules]]
+id = "windows-user-profile-path"
+description = "Absolute Windows user-profile path (leaks local username/machine layout)"
+regex = '''C:\\Users\\[A-Za-z0-9_.-]+'''
+tags = ["path", "custom"]

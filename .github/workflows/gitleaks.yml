@@ -1,0 +1,24 @@
+name: gitleaks
+
+# Second layer of secret/PII scanning that doesn't depend on the local
+# pre-commit hook being installed or configured correctly, or on nobody
+# using --no-verify. Runs the same ruleset (.gitleaks.toml) as
+# .githooks/pre-commit.
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
