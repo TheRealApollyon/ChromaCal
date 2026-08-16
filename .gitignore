@@ -9,3 +9,10 @@ __pycache__/
 # package-lock.json IS committed, for reproducible rebuilds.
 frontend/node_modules/
 frontend/dist-typecheck/
+
+# Real local values (private IPs, hostnames, deployment paths) never get
+# committed -- CLAUDE.md and everywhere else use placeholders instead
+# (<ha-host>, <local-path>). This file is where the real values for local
+# reference actually live -- e.g. the replace-text mapping used to scrub
+# them from history via git filter-repo. Never remove this line.
+replacements.txt
