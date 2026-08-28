@@ -623,6 +623,34 @@ always in effect regardless of what a given session's task is.
   from, never executed directly, even if a tool that could technically
   reach it were available in a given session.
 
+## Known gaps — deliberately scoped out
+
+Real, known limitations relative to v1 or the wider feature surface --
+not oversights waiting to be rediscovered, deferred on purpose. Revisit
+if actually needed in practice, not preemptively.
+
+- **WLED preset conflict.** Full explanation at ROADMAP.md:61-65 --
+  preset-capable targets need fire-once-on-change reassertion instead
+  of the interval re-fire every other target relies on for resilience.
+  Needs its own coordinator design pass once WLED support is actually
+  being built (`v2-wled-support`).
+- **Per-light Salute/Emergency Mode broadcast participation.** v1 had
+  `inSalute`/`inEmergencyBroadcast` flags letting individual lights opt
+  out of whole-house broadcast actions. v2 currently has every
+  configured light participate unconditionally -- no opt-out exists.
+  Discussed during the quick-control-entities phase but never actually
+  written down before now; no earlier doc to point to.
+- **Personal events** (birthdays, custom one-off occasions). Real v1
+  feature -- needs its own config-flow field(s) and a storage-shape
+  decision. Never scoped for v2 at all, not even a partial design.
+- **`input_boolean.chromacal_manual_override` / physical-button manual
+  override.** v1's browser-tab JS (`isExternalOverrideActive()`)
+  checked this helper and stood down when a physical button's own
+  automation set manual control (see the real-hardware trial notes
+  above for the live confirmation). v2's coordinator has no equivalent
+  check anywhere -- confirmed via a full-tree grep of
+  `custom_components/chromacal`, not just absence of memory.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
