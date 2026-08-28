@@ -595,6 +595,34 @@ history if it's ever needed again; this is the standing summary.
   password/token/secret/api_key/credential/bearer; zero hits in
   application code.
 
+## Standing operational boundaries — permanent, not session-specific
+
+Two hard rules about handling the real Pi, in the same category as
+"never fill in a real login form": not situational judgment calls,
+always in effect regardless of what a given session's task is.
+
+- **No real IPs, hostnames, usernames, or absolute local paths in
+  anything that gets committed** -- including this file. Use
+  placeholders (`<ha-host>`, `<local-path>`) instead; real values for
+  local reference live only in `replacements.txt` (gitignored, never
+  committed). Enforced by `.githooks/pre-commit` (gitleaks, scanning
+  staged changes against `.gitleaks.toml`) and `.github/workflows/gitleaks.yml`
+  as a second layer that doesn't depend on the hook being installed
+  correctly or not bypassed with `--no-verify`. This is a chat-vs-file
+  distinction, not a says-it-once-so-it's-fine one: a real value
+  appearing in conversation doesn't license writing it into a file that
+  gets committed -- translate to the placeholder regardless of how the
+  value arrived.
+- **No direct SSH/network access to the real production Pi, ever, under
+  any circumstances.** The one HA instance in this whole setup is
+  production, controlling real lights in a real house (see above) --
+  Shane runs every command against it himself, in his own terminal, and
+  reports output back. Every step involving the real Pi -- backups,
+  file copies, automation changes, restarts, config-flow setup -- gets
+  written as instructions for Shane to run manually and paste results
+  from, never executed directly, even if a tool that could technically
+  reach it were available in a given session.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
