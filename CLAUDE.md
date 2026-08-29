@@ -592,6 +592,32 @@ in the log. Default to multi-light in any future verification pass that
 touches entity or device registration -- a single-light setup cannot
 exercise this class of bug.
 
+## Open question — the 2026-08-28 23:06:56 PM light flip-back is UNRESOLVED, not "likely hardware"
+
+During the real-Pi trial that surfaced the device/subentry bug above,
+the Activity log for `light.shane_office_dongle_outside_lights_zha`
+showed: off at 23:04:54 (close to the expected schedule), back on at
+23:06:56 (unprompted), off again at 23:08:21 (Shane, manually). Chat
+speculation at the time leaned toward this being the same documented
+ZHA-group stuck-state quirk this hardware has hit before -- plausible,
+but never actually confirmed.
+
+The attempt to confirm it from `home-assistant.log` came back empty --
+but that turned out to mean nothing: `grep`ing the *entire* log file
+for any ChromaCal `_LOGGER.info()` output (the routine per-cycle
+schedule line every active light logs every ~5 minutes) also returned
+zero matches, proving INFO-level logging wasn't being captured in this
+file at all under the instance's default config, not that nothing
+fired. The empty result near 23:06:56 was an absence of evidence, not
+evidence of absence -- record it as such, not as a confirmed root
+cause. `logger: logs: custom_components.chromacal: debug` has since
+been added to `configuration.yaml` specifically so a future occurrence
+has a real trace to check instead of hitting this same dead end.
+
+Until an actual debug-level trace catches this happening again, treat
+the cause as genuinely open -- ZHA/hardware flakiness remains the
+leading theory, not a confirmed finding.
+
 ## Security review (post-Phase 11) — findings, so this doesn't need re-deriving
 
 A targeted audit of the v2 integration ahead of wider distribution,
