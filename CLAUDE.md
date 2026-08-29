@@ -540,6 +540,58 @@ running container did. One more entry in this file's running tally of
 things live verification catches that automated tests structurally
 cannot.
 
+## Backend gotcha — every entity sharing one device identifier silently reassigns the device between subentries
+
+Symptom (2026-08-28, first real-hardware trial): after `Add Integration`
+completed with one configured light, the panel showed "No lights
+configured yet," `Developer Tools > States` filtered to `chromacal`
+showed exactly one entity (the per-light Force White button) instead of
+the full expected set (schedule sensor, Upcoming Events/House View
+sensors, permanent-skip switches, Emergency switch, three global
+buttons, Force White), and the log showed `homeassistant.helpers.frame`
+warnings: `"Detected that custom integration 'chromacal' assigns an
+existing device to a different config subentry"`, pointing at
+`sensor.py` line 41 and `button.py` line 68. Single-light setup only --
+never caught in earlier phases because nothing before this exercised
+more than one light against real device/subentry code at once.
+
+Root cause, confirmed by reading every `DeviceInfo(...)` construction
+across `sensor.py`/`switch.py`/`button.py`: every entity in all three
+platforms used the identical `identifiers={(DOMAIN, entry_id)}` --
+including per-light entities added via `async_add_entities([...],
+config_subentry_id=schedule.subentry_id)`. HA requires a device to
+belong to exactly one subentry; every setup call that touched that
+shared identifier under a different `config_subentry_id` than its
+current owner silently reassigned the device, and `PLATFORMS =
+["sensor", "switch", "button"]` in `__init__.py` means button.py's
+per-light loop runs last -- so its Force White button won the final
+reassignment and was the only thing left visibly intact. `switch.py`
+never triggers the warning itself (skips/Emergency never pass a
+subentry_id, correctly global), but it's still collateral damage from
+the same shared identifier getting reassigned out from under it by the
+other two platforms.
+
+Fix: per-light entities (`ChromaCalScheduleSensor`, `ChromaCalForceWhiteButton`)
+get their own device, identified by `(DOMAIN, schedule.subentry_id)` and
+named after the light itself, instead of sharing the hub's `(DOMAIN,
+entry_id)` identifier. Genuinely global entities (the three buttons,
+the two global sensors, all skip switches, the Emergency switch) keep
+the shared hub identifier unchanged, since none of them ever claim a
+subentry. `_attr_name` on the per-light entities shortened to just the
+suffix ("Schedule", "Force White") since `_attr_has_entity_name = True`
+now correctly combines it with the light's own device name instead of
+the name being manually pre-baked in.
+
+Verified in the disposable `chromacal-verify` container with **two**
+configured lights (not one) -- the scenario that exposed this in the
+first place needs at least two devices/subentries actually competing
+for the same identifier to surface at all. Confirmed 3 devices / 92
+entities (hub + 2 per-light devices, each with its own schedule sensor
+and Force White button) and zero `"different config subentry"` warnings
+in the log. Default to multi-light in any future verification pass that
+touches entity or device registration -- a single-light setup cannot
+exercise this class of bug.
+
 ## Security review (post-Phase 11) — findings, so this doesn't need re-deriving
 
 A targeted audit of the v2 integration ahead of wider distribution,

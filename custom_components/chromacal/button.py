@@ -175,11 +175,18 @@ class ChromaCalForceWhiteButton(CoordinatorEntity[ChromaCalCoordinator], ButtonE
         super().__init__(coordinator)
         self._light_entity = light_entity
         schedule = coordinator.data[light_entity]
-        self._attr_name = f"{schedule.light_name} Force White"
+        self._attr_name = "Force White"
         # Keyed on subentry_id (Phase 8) -- see sensor.py's identical
         # change and __init__.py's async_migrate_entry.
         self._attr_unique_id = f"{entry_id}_{schedule.subentry_id}_force_white"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name="ChromaCal")
+        # Own device per light, scoped by subentry_id -- see sensor.py's
+        # ChromaCalScheduleSensor for the full explanation of why sharing
+        # the hub's (DOMAIN, entry_id) identifier here caused entities to
+        # silently vanish on real hardware (2026-08-28 trial).
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, schedule.subentry_id)},
+            name=schedule.light_name,
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

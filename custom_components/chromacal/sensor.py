@@ -64,15 +64,26 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
         super().__init__(coordinator)
         self._light_entity = light_entity
         schedule = coordinator.data[light_entity]
-        self._attr_name = f"{schedule.light_name} Schedule"
+        self._attr_name = "Schedule"
         # Keyed on the light's stable subentry_id (Phase 8), not
         # light_entity -- see __init__.py's async_migrate_entry for why
         # that matters and how already-configured lights got moved over
         # without losing this entity's identity.
         self._attr_unique_id = f"{entry_id}_{schedule.subentry_id}_schedule"
+        # Own device per light, identified by subentry_id, NOT the shared
+        # (DOMAIN, entry_id) hub identifier every global entity uses --
+        # a device can only belong to one config_subentry_id at a time,
+        # and this entity IS added with config_subentry_id=schedule.
+        # subentry_id (see async_setup_entry below). Sharing the hub's
+        # identifier here caused HA to silently reassign that one shared
+        # device between the hub and whichever light's entities were set
+        # up last, on every restart -- confirmed live 2026-08-28, real
+        # Pi trial: only the last-loaded per-light entity (button.py's
+        # Force White, since PLATFORMS loads button.py last) ended up
+        # visible; every other sensor/switch/button silently vanished.
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry_id)},
-            name="ChromaCal",
+            identifiers={(DOMAIN, schedule.subentry_id)},
+            name=schedule.light_name,
         )
 
     @property
