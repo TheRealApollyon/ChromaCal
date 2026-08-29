@@ -592,6 +592,31 @@ in the log. Default to multi-light in any future verification pass that
 touches entity or device registration -- a single-light setup cannot
 exercise this class of bug.
 
+Confirmed on the real Pi too, 2026-08-29, not just the disposable
+container -- and it surfaced a self-healing mechanism worth expecting,
+not fearing, on any future upgrade from a pre-fix install: the real
+instance's device registry still had the single, tangled device record
+from the original buggy setup the night before (`created_at` timestamped
+to that first broken run). The very first restart on the fixed code
+logged exactly **one** `"different config subentry"` warning -- not
+zero -- as it correctly split that one legacy record into two clean
+devices (hub, `config_subentry_id: null`; the light, `config_subentry_id`
+set to its real subentry ID). Confirmed directly from the device
+registry (`.storage/core.device_registry`), not inferred: exactly 2
+ChromaCal devices, correctly separated, and the per-light device's
+`created_at` matched the warning's timestamp to the second. A second
+restart on the now-settled registry logged **zero** -- confirmed via
+`grep -c "different config subentry"` before (1) and after (0) on a
+freshly-rotated `home-assistant.log` (HA rotates this file fresh on
+every restart, so "0" in a new log is the real signal, not "still 1").
+
+Net: one `"different config subentry"` warning on the *first* restart
+after upgrading an existing pre-fix install is the expected, self-
+healing correction, not a regression -- it means the split worked. Only
+worry if it's still nonzero on a *second* restart afterward, which would
+mean something is genuinely still unsettled rather than a one-time
+historical correction.
+
 ## Open question — the 2026-08-28 23:06:56 PM light flip-back is UNRESOLVED, not "likely hardware"
 
 During the real-Pi trial that surfaced the device/subentry bug above,
