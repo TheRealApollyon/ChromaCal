@@ -617,31 +617,89 @@ worry if it's still nonzero on a *second* restart afterward, which would
 mean something is genuinely still unsettled rather than a one-time
 historical correction.
 
-## Open question — the 2026-08-28 23:06:56 PM light flip-back is UNRESOLVED, not "likely hardware"
+## Open question -- the 2026-08-28/29 light flip-back: ChromaCal ruled out as issuer, root mechanism still open
 
-During the real-Pi trial that surfaced the device/subentry bug above,
-the Activity log for `light.shane_office_dongle_outside_lights_zha`
-showed: off at 23:04:54 (close to the expected schedule), back on at
-23:06:56 (unprompted), off again at 23:08:21 (Shane, manually). Chat
-speculation at the time leaned toward this being the same documented
-ZHA-group stuck-state quirk this hardware has hit before -- plausible,
-but never actually confirmed.
+Two separate nights, same signature, on
+`light.shane_office_dongle_outside_lights_zha`: correct scheduled off,
+an unprompted on a couple minutes later, a self-correcting off shortly
+after that. Night 1 (2026-08-28, from the entity's own Activity log,
+not yet independently raw-log-confirmed): off 23:04:54, on 23:06:56,
+off 23:08:21 (Shane, manually). Night 2 (2026-08-29, confirmed via
+real, raw, debug-level `home-assistant.log` output pasted directly
+into this session): off logged by ChromaCal at 23:01:06, an unprompted
+on reported around 23:03:08, a self-correcting off around 23:18:08.
 
-The attempt to confirm it from `home-assistant.log` came back empty --
-but that turned out to mean nothing: `grep`ing the *entire* log file
-for any ChromaCal `_LOGGER.info()` output (the routine per-cycle
-schedule line every active light logs every ~5 minutes) also returned
-zero matches, proving INFO-level logging wasn't being captured in this
-file at all under the instance's default config, not that nothing
-fired. The empty result near 23:06:56 was an absence of evidence, not
-evidence of absence -- record it as such, not as a confirmed root
-cause. `logger: logs: custom_components.chromacal: debug` has since
-been added to `configuration.yaml` specifically so a future occurrence
-has a real trace to check instead of hitting this same dead end.
+The first attempt to check this (this entry's prior version) came back
+empty because INFO-level ChromaCal logging wasn't actually being
+captured at all -- absence of evidence, not evidence of absence.
+`logger: logs: custom_components.chromacal: debug` was added
+specifically to fix that, and this time it worked: the real, raw grep
+of `home-assistant.log` for Aug 29 23:00-23:26 shows
 
-Until an actual debug-level trace catches this happening again, treat
-the cause as genuinely open -- ZHA/hardware flakiness remains the
-leading theory, not a confirmed finding.
+```
+2026-08-29 23:01:06.117 INFO ... ChromaCal: Outside Front Lights -> Default (default tier, 19.63h-22.00h)
+2026-08-29 23:01:06.140 INFO ... ChromaCal: fired light.turn_off on Outside Front Lights (off) -> {'transition': 120}
+2026-08-29 23:01:06.141 DEBUG ... Finished fetching chromacal data in 0.026 seconds (success: True)
+2026-08-29 23:06:06.117 INFO ... ChromaCal: Outside Front Lights -> Default (default tier, 19.63h-22.00h)
+2026-08-29 23:06:06.117 DEBUG ... Finished fetching chromacal data in 0.003 seconds (success: True)
+[... identical no-op pattern repeats cleanly at 23:11:06, 23:16:06, 23:21:06, 23:26:06 ...]
+```
+
+with **nothing else ChromaCal-related anywhere in the window** -- no
+line of any kind near 23:03:08 or 23:18:08. The 23:01:06 entry's full
+3-line signature, plus five more clean no-op cycles landing exactly on
+their 5-minute schedule, is the positive control: debug logging was
+genuinely live and capturing ChromaCal's activity throughout this
+window, so silence at the two moments that matter is real signal this
+time, not another dead end. **This closes the question of whether
+ChromaCal itself issued the phantom command: it didn't, confirmed via
+real trace data, not inferred.** No automation activity of any kind
+appears anywhere in the pasted window either -- the only other lines
+are unrelated router-stats and weather-template warnings.
+
+That is *not* the same as "hardware, unrelated to ChromaCal" --
+pushback worth recording here: this exact light has never shown this
+behavior across its history with only the old hand-tuned automations
+driving it, only on the two nights ChromaCal has been configured
+against it. A code check (grepping the whole integration) confirms
+ChromaCal never reads or subscribes to this entity's live state at all
+-- `hass.states.get()` appears exactly once anywhere in this codebase,
+for `sun.sun`; nothing touches the light entity itself outside of
+actually firing a command -- so generic "polling presence" isn't the
+mechanism. But a sharper, code-grounded candidate turned up: ChromaCal's
+off command carries `transition: 120` (confirmed live in the log above,
+not assumed from the wizard default it happens to match), meaning the
+group keeps physically transitioning for two full minutes after the
+logged command returns. The arithmetic on both nights lands within ~2
+seconds of that transition's completion, not near any 5-minute poll
+boundary:
+
+- Night 2 (raw-confirmed): 23:01:06.140 + 120s = 23:03:06.140 -- reported on at ~23:03:08.
+- Night 1 (prose-sourced, not yet independently raw-confirmed): 23:04:54 + 120s = 23:06:54 -- reported on at 23:06:56.
+
+Same ~2-second offset, two nights running. The working hypothesis is
+now specific and testable: a synchronized 120-second 4-bulb fade-out
+transition may be a genuinely new command shape for this ZHA group --
+one the old hand-tuned automation may never have sent -- landing at
+exactly the kind of moment (the tail end of a multi-bulb group
+transition) where this hardware's already-documented ZHA/Innr group
+quirks are known to surface.
+
+**Still open, not to be closed until confirmed:**
+- The old "Outdoor Lights - Late Night Off" automation's actual YAML
+  -- specifically whether its own off command uses a `transition` at
+  all, and how long. This is the deciding fact for whether the
+  120-second transition is genuinely new for this group or something
+  it's handled fine for months.
+- Night 1's off-timestamp (23:04:54) independently confirmed via a raw
+  log/trace paste, matching the rigor Night 2 now has.
+
+Until the automation's real transition value is confirmed, treat this
+as: **ChromaCal did not issue the phantom command (settled); whether
+ChromaCal's specific command shape is what exposes a pre-existing
+hardware quirk is open** -- not "hardware, unrelated" and not
+"ChromaCal caused it."
+
 
 ## Security review (post-Phase 11) — findings, so this doesn't need re-deriving
 
