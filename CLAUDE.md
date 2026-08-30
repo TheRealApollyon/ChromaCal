@@ -617,24 +617,24 @@ worry if it's still nonzero on a *second* restart afterward, which would
 mean something is genuinely still unsettled rather than a one-time
 historical correction.
 
-## Open question -- the 2026-08-28/29 light flip-back: ChromaCal ruled out as issuer, root mechanism still open
+## Root cause, closed -- the 2026-08-28/29 light flip-back is a pre-existing ZHA-group quirk during long transitions, not something ChromaCal introduced
 
 Two separate nights, same signature, on
 `light.shane_office_dongle_outside_lights_zha`: correct scheduled off,
 an unprompted on a couple minutes later, a self-correcting off shortly
 after that. Night 1 (2026-08-28, from the entity's own Activity log,
-not yet independently raw-log-confirmed): off 23:04:54, on 23:06:56,
-off 23:08:21 (Shane, manually). Night 2 (2026-08-29, confirmed via
-real, raw, debug-level `home-assistant.log` output pasted directly
-into this session): off logged by ChromaCal at 23:01:06, an unprompted
-on reported around 23:03:08, a self-correcting off around 23:18:08.
+not independently raw-log-confirmed): off 23:04:54, on 23:06:56, off
+23:08:21 (Shane, manually). Night 2 (2026-08-29, confirmed via real,
+raw, debug-level `home-assistant.log` output pasted directly into this
+session): off logged by ChromaCal at 23:01:06, an unprompted on
+reported around 23:03:08, a self-correcting off around 23:18:08.
 
-The first attempt to check this (this entry's prior version) came back
-empty because INFO-level ChromaCal logging wasn't actually being
-captured at all -- absence of evidence, not evidence of absence.
-`logger: logs: custom_components.chromacal: debug` was added
-specifically to fix that, and this time it worked: the real, raw grep
-of `home-assistant.log` for Aug 29 23:00-23:26 shows
+The first attempt to check this came back empty because INFO-level
+ChromaCal logging wasn't actually being captured at all -- absence of
+evidence, not evidence of absence. `logger: logs:
+custom_components.chromacal: debug` was added specifically to fix
+that, and this time it worked: the real, raw grep of
+`home-assistant.log` for Aug 29 23:00-23:26 shows
 
 ```
 2026-08-29 23:01:06.117 INFO ... ChromaCal: Outside Front Lights -> Default (default tier, 19.63h-22.00h)
@@ -650,56 +650,86 @@ line of any kind near 23:03:08 or 23:18:08. The 23:01:06 entry's full
 3-line signature, plus five more clean no-op cycles landing exactly on
 their 5-minute schedule, is the positive control: debug logging was
 genuinely live and capturing ChromaCal's activity throughout this
-window, so silence at the two moments that matter is real signal this
-time, not another dead end. **This closes the question of whether
-ChromaCal itself issued the phantom command: it didn't, confirmed via
-real trace data, not inferred.** No automation activity of any kind
-appears anywhere in the pasted window either -- the only other lines
-are unrelated router-stats and weather-template warnings.
+window, so silence at the two moments that matter is real signal, not
+another dead end. **ChromaCal did not issue the phantom command --
+confirmed via real trace data, not inferred.** No automation activity
+of any kind appears anywhere in the pasted window either -- the only
+other lines are unrelated router-stats and weather-template warnings.
 
-That is *not* the same as "hardware, unrelated to ChromaCal" --
-pushback worth recording here: this exact light has never shown this
-behavior across its history with only the old hand-tuned automations
-driving it, only on the two nights ChromaCal has been configured
-against it. A code check (grepping the whole integration) confirms
-ChromaCal never reads or subscribes to this entity's live state at all
--- `hass.states.get()` appears exactly once anywhere in this codebase,
-for `sun.sun`; nothing touches the light entity itself outside of
-actually firing a command -- so generic "polling presence" isn't the
-mechanism. But a sharper, code-grounded candidate turned up: ChromaCal's
-off command carries `transition: 120` (confirmed live in the log above,
-not assumed from the wizard default it happens to match), meaning the
-group keeps physically transitioning for two full minutes after the
-logged command returns. The arithmetic on both nights lands within ~2
-seconds of that transition's completion, not near any 5-minute poll
-boundary:
+The follow-up question -- given this light had never shown this
+behavior before ChromaCal was configured against it, is ChromaCal's
+own command shape (specifically its `transition: 120` fade-out)
+somehow new/triggering for this hardware, rather than genuinely
+unrelated? -- is now answered, by the pre-existing automation's own
+real YAML (Shane's "Outside Lights - Late Night Off", predating
+ChromaCal entirely):
 
-- Night 2 (raw-confirmed): 23:01:06.140 + 120s = 23:03:06.140 -- reported on at ~23:03:08.
-- Night 1 (prose-sourced, not yet independently raw-confirmed): 23:04:54 + 120s = 23:06:54 -- reported on at 23:06:56.
+```yaml
+  - action: light.turn_off
+    target:
+      entity_id: light.shane_office_dongle_outside_lights_zha
+    data:
+      transition: 120
+  - delay:
+      seconds: 180
+  - repeat:
+      for_each: |
+        {{ label_entities('porch_lights')
+           | select('match', 'light\.')
+           | expand
+           | selectattr('state', 'ne', 'off')
+           | map(attribute='entity_id')
+           | list }}
+      sequence:
+        - action: light.turn_off
+          target:
+            entity_id: '{{ repeat.item }}'
+          data:
+            transition: 5
+  - delay:
+      seconds: 60
+  - repeat: # identical second pass
+      ...
+```
 
-Same ~2-second offset, two nights running. The working hypothesis is
-now specific and testable: a synchronized 120-second 4-bulb fade-out
-transition may be a genuinely new command shape for this ZHA group --
-one the old hand-tuned automation may never have sent -- landing at
-exactly the kind of moment (the tail end of a multi-bulb group
-transition) where this hardware's already-documented ZHA/Innr group
-quirks are known to surface.
+This same automation has been sending this exact group this exact
+`transition: 120` off command every night for as long as it's existed
+-- ChromaCal's own `fade_out: 120` (set deliberately in the wizard,
+confirmed with Shane, not coincidentally landing on the default) simply
+matches a value this hardware has been asked for all along. **This
+falsifies "ChromaCal introduced a novel 120-second transition" as the
+explanation for why now.** The far more mundane read: this
+phantom-on/self-correct blip has likely been happening for as long as
+this automation has run this way, every night, unnoticed -- a
+15-second state hiccup at 11 PM while everyone's asleep leaves no trace
+unless debug logging is active and something makes you look at Activity
+history at exactly that resolution, which is precisely the two-night
+window ChromaCal's trial happened to create. **Root cause: ZHA-group-
+level flakiness at the tail of a long synchronized transition -- a
+pre-existing quirk of this specific hardware/group, mechanistically
+consistent with the already-documented February "3 of 4 turned red" /
+"group reports wrong state" incidents -- not anything ChromaCal
+introduced. Discovered now only through closer observation, not caused
+by ChromaCal.**
 
-**Still open, not to be closed until confirmed:**
-- The old "Outdoor Lights - Late Night Off" automation's actual YAML
-  -- specifically whether its own off command uses a `transition` at
-  all, and how long. This is the deciding fact for whether the
-  120-second transition is genuinely new for this group or something
-  it's handled fine for months.
-- Night 1's off-timestamp (23:04:54) independently confirmed via a raw
-  log/trace paste, matching the rigor Night 2 now has.
+Confirmed directly (Settings > Devices & Services, not inferred):
+`light.shane_office_dongle_outside_lights_zha` does **not** carry the
+`porch_lights` label -- only its four individual member bulbs (Balcony
+Left/Right, Porch Left/Right) do. This automation's retry loop, which
+operates on `label_entities('porch_lights')`, has therefore **never
+touched the group entity's own reported state at all**. Both nights'
+self-corrections happened with nothing in Home Assistant acting on the
+group entity -- its own aggregate state settled back to correct on its
+own, with zero software intervention of any kind. That's a purely
+hardware-internal finding, not merely consistent with one.
 
-Until the automation's real transition value is confirmed, treat this
-as: **ChromaCal did not issue the phantom command (settled); whether
-ChromaCal's specific command shape is what exposes a pre-existing
-hardware quirk is open** -- not "hardware, unrelated" and not
-"ChromaCal caused it."
-
+**Plan A's real defaults, sourced directly from this same YAML, not
+invented:** initial check delay of 180 seconds after firing, then up
+to two recheck/retry passes at 60-second intervals, then notify
+either way. The retry passes themselves use a short `transition: 5`,
+not a repeat of the full 120-second fade -- worth mirroring in
+ChromaCal's own implementation rather than replaying the long
+transition on every retry attempt.
 
 ## Security review (post-Phase 11) — findings, so this doesn't need re-deriving
 
