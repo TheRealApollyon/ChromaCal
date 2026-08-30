@@ -82,6 +82,20 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
               Manage Lights &amp; Categories
             </a>
             <button
+              class="control-btn"
+              ?disabled=${!e.globals.catchUpEntityId}
+              @click=${()=>this._pressButton(e.globals.catchUpEntityId)}
+            >
+              Catch Up / Sync
+            </button>
+            <button
+              class="control-btn"
+              ?disabled=${!e.globals.stopEntityId}
+              @click=${()=>this._pressButton(e.globals.stopEntityId)}
+            >
+              Stop
+            </button>
+            <button
               class="emergency-toggle ${e.globals.emergencyOn?"active":""}"
               ?disabled=${!e.globals.emergencyEntityId}
               @click=${()=>this._toggleSwitch(e.globals.emergencyEntityId,e.globals.emergencyOn)}
@@ -146,20 +160,6 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
                   @click=${()=>this._pressButton(e.globals.saluteEntityId)}
                 >
                   ${e.globals.saluteRunning?"Cancel Salute":"21 Gun Salute"}
-                </button>
-                <button
-                  class="control-btn"
-                  ?disabled=${!e.globals.catchUpEntityId}
-                  @click=${()=>this._pressButton(e.globals.catchUpEntityId)}
-                >
-                  Catch Up / Sync
-                </button>
-                <button
-                  class="control-btn"
-                  ?disabled=${!e.globals.stopEntityId}
-                  @click=${()=>this._pressButton(e.globals.stopEntityId)}
-                >
-                  Stop
                 </button>
               </div>
             </details>

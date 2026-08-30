@@ -173,6 +173,20 @@ export class ChromaCalPanel extends LitElement {
               Manage Lights &amp; Categories
             </a>
             <button
+              class="control-btn"
+              ?disabled=${!model.globals.catchUpEntityId}
+              @click=${() => this._pressButton(model.globals.catchUpEntityId)}
+            >
+              Catch Up / Sync
+            </button>
+            <button
+              class="control-btn"
+              ?disabled=${!model.globals.stopEntityId}
+              @click=${() => this._pressButton(model.globals.stopEntityId)}
+            >
+              Stop
+            </button>
+            <button
               class="emergency-toggle ${model.globals.emergencyOn ? "active" : ""}"
               ?disabled=${!model.globals.emergencyEntityId}
               @click=${() =>
@@ -246,20 +260,6 @@ export class ChromaCalPanel extends LitElement {
                   @click=${() => this._pressButton(model.globals.saluteEntityId)}
                 >
                   ${model.globals.saluteRunning ? "Cancel Salute" : "21 Gun Salute"}
-                </button>
-                <button
-                  class="control-btn"
-                  ?disabled=${!model.globals.catchUpEntityId}
-                  @click=${() => this._pressButton(model.globals.catchUpEntityId)}
-                >
-                  Catch Up / Sync
-                </button>
-                <button
-                  class="control-btn"
-                  ?disabled=${!model.globals.stopEntityId}
-                  @click=${() => this._pressButton(model.globals.stopEntityId)}
-                >
-                  Stop
                 </button>
               </div>
             </details>
