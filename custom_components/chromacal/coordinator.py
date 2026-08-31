@@ -93,6 +93,12 @@ from .scheduling.engine import (
 from .scheduling.fire import FireCommand, build_fire_command
 from .scheduling.models import NightSegment, UpcomingEvent
 from .scheduling.sunset import resolve_sunset_hour
+from .scheduling.verify import (
+    VERIFY_RETRY_INTERVAL_SECONDS,
+    build_retry_command,
+    is_verifiable,
+    state_matches,
+)
 
 # Desired-fire-keys that mean "do nothing" -- an existing sunset/sunrise
 # automation is assumed to handle these phases, matching v1.
@@ -103,6 +109,13 @@ _LOGGER = logging.getLogger(__name__)
 UPDATE_INTERVAL = timedelta(minutes=5)
 FORCE_WHITE_OVERRIDE_MINUTES = 30  # matches v1's OVERRIDE_MINS -- real-world tuned, not arbitrary
 EMERGENCY_FIRE_INTERVAL = timedelta(seconds=5)  # matches v1's default CFG.emergencyInterval
+
+
+def _verify_notification_id(light_entity: str) -> str:
+    """Stable per-light id -- a second consecutive failure replaces the
+    existing notification instead of stacking a new one, and a later
+    success can find and dismiss it by this same id."""
+    return f"{DOMAIN}_verify_{light_entity}"
 
 # _manual_override source tags -- which mechanism currently owns a light's
 # override, so cleanup only ever clears an entry it still owns (see
@@ -134,6 +147,20 @@ class ManualOverride:
 
     source: str
     expires_at: datetime | None = None
+
+
+@dataclass
+class VerifyState:
+    """One light's most recent verify-and-retry outcome (Plan A) -- read by
+    sensor.py so a future panel surface can show real verify status instead
+    of faking one. "pending" covers the whole window between a fire and its
+    first check landing, not just the initial delay -- see
+    _call_fire_command_verified()'s docstring for the full state machine.
+    """
+
+    result: str  # "pending" | "ok" | "failed"
+    checked_at: datetime | None
+    attempts_used: int
 
 
 @dataclass
@@ -272,6 +299,16 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # which is a one-shot breadcrumb, not resumable state.
         self.emergency_active: bool = False
         self._emergency_unsub: Callable[[], None] | None = None
+        # Verify-and-retry (Plan A), both keyed by light_entity so state
+        # and pending timers never collide or leak between lights -- a
+        # real concern with 2+ configured lights firing independently.
+        # _verify_state is read by sensor.py; _verify_pending_unsub cancels
+        # a light's still-running verify chain if a NEW fire for that same
+        # light happens before the previous chain finished (a later
+        # schedule transition arriving mid-retry), so two overlapping
+        # chains for one light can never both be live at once.
+        self._verify_state: dict[str, VerifyState] = {}
+        self._verify_pending_unsub: dict[str, Callable[[], None]] = {}
 
     @property
     def lights(self) -> list[dict[str, Any]]:
@@ -675,7 +712,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         if command is None:
             return
 
-        await self._call_fire_command(light_entity, light, desired_key, command)
+        await self._call_fire_command_verified(light_entity, light, desired_key, command)
 
     async def _call_fire_command(
         self, light_entity: str, light: LightConfig, key: str, command: FireCommand
@@ -706,6 +743,140 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             _LOGGER.error(
                 "ChromaCal: auto-fire error for %s: %s", light.name or light_entity, err
             )
+
+    async def _call_fire_command_verified(
+        self, light_entity: str, light: LightConfig, key: str, command: FireCommand
+    ) -> None:
+        """Same as _call_fire_command, plus verify-and-retry (Plan A): after
+        firing, confirm the light actually reports the intended state
+        instead of just trusting the service call landed.
+
+        Used by the real schedule-driven fire paths only -- _auto_fire,
+        async_force_fire's per-light loop, and Force White's initial fire --
+        NOT Salute's volley steps or Emergency's flasher, both of which
+        already re-fire every few seconds by design; layering a
+        180-second-plus wait-and-retry loop into either would fight their
+        own timing rather than help it. async_recheck_color_cycle's ~60s
+        re-fire is excluded for the same reason.
+
+        Verification runs as a background task scheduled via
+        async_call_later (the same idiom Force White's own resume already
+        uses), not a long-lived asyncio.sleep here -- this method returns
+        as soon as the initial command is issued, so callers on the
+        5-minute coordinator cycle or a button press are never blocked for
+        up to five minutes waiting out a full check-delay + retry sequence.
+
+        Any previous still-pending verify chain for this exact light is
+        cancelled first -- if a new fire arrives (a later schedule
+        transition) before an earlier chain finished, only the newest
+        chain should be live; two overlapping chains for one light would
+        double-fire retries and could report a stale result.
+        """
+        await self._call_fire_command(light_entity, light, key, command)
+
+        self._cancel_pending_verify(light_entity)
+        if not light.verify_enabled or not is_verifiable(command):
+            return
+
+        self._verify_state[light_entity] = VerifyState(
+            result="pending", checked_at=None, attempts_used=0
+        )
+
+        async def _first_check(_now: datetime) -> None:
+            await self._run_verify_check(light_entity, light, command, light.verify_retry_count)
+
+        self._verify_pending_unsub[light_entity] = async_call_later(
+            self.hass, timedelta(seconds=light.verify_check_delay), _first_check
+        )
+
+    def _cancel_pending_verify(self, light_entity: str) -> None:
+        unsub = self._verify_pending_unsub.pop(light_entity, None)
+        if unsub is not None:
+            unsub()
+
+    async def _run_verify_check(
+        self,
+        light_entity: str,
+        light: LightConfig,
+        command: FireCommand,
+        attempts_left: int,
+    ) -> None:
+        """One verify check. On a match, records success and clears any
+        stale failure notification. On a mismatch with attempts remaining,
+        re-fires a short-transition retry (see build_retry_command) and
+        schedules the next check VERIFY_RETRY_INTERVAL_SECONDS later. On a
+        mismatch with no attempts left, notifies.
+        """
+        self._verify_pending_unsub.pop(light_entity, None)  # this timer just fired
+        state = self.hass.states.get(light_entity)
+        attempts_used = light.verify_retry_count - attempts_left
+        actual_state = state.state if state is not None else None
+        actual_brightness = state.attributes.get("brightness") if state is not None else None
+
+        if state_matches(command, actual_state, actual_brightness):
+            self._verify_state[light_entity] = VerifyState(
+                result="ok", checked_at=dt_util.now(), attempts_used=attempts_used
+            )
+            persistent_notification.async_dismiss(self.hass, _verify_notification_id(light_entity))
+            return
+
+        if attempts_left <= 0:
+            self._verify_state[light_entity] = VerifyState(
+                result="failed", checked_at=dt_util.now(), attempts_used=attempts_used
+            )
+            self._notify_verify_failure(light_entity, light, command, actual_state)
+            return
+
+        _LOGGER.warning(
+            "ChromaCal: verify failed for %s (wanted %s, got %s) -- retrying, %d attempt(s) left",
+            light.name or light_entity,
+            "on" if command.service == "turn_on" else "off",
+            actual_state,
+            attempts_left,
+        )
+        # Still pending -- but record the attempt now, not only at ok/failed,
+        # so a mid-sequence read of verify_state_for() (a future panel
+        # surface, or just this) shows real progress instead of a stale
+        # attempts_used=0 through the whole retry window.
+        self._verify_state[light_entity] = VerifyState(
+            result="pending", checked_at=dt_util.now(), attempts_used=attempts_used
+        )
+        retry_command = build_retry_command(command)
+        await self._call_fire_command(light_entity, light, "verify_retry", retry_command)
+
+        async def _next_check(_now: datetime) -> None:
+            await self._run_verify_check(light_entity, light, command, attempts_left - 1)
+
+        self._verify_pending_unsub[light_entity] = async_call_later(
+            self.hass, timedelta(seconds=VERIFY_RETRY_INTERVAL_SECONDS), _next_check
+        )
+
+    def _notify_verify_failure(
+        self,
+        light_entity: str,
+        light: LightConfig,
+        command: FireCommand,
+        actual_state: str | None,
+    ) -> None:
+        wanted = "on" if command.service == "turn_on" else "off"
+        persistent_notification.async_create(
+            self.hass,
+            (
+                f"**{light.name or light_entity}** should be **{wanted}**, but "
+                f"still reports **{actual_state or 'unknown'}** after "
+                f"{light.verify_retry_count} retry attempt(s). Check the light "
+                "and its ZHA/Zigbee connection."
+            ),
+            title="💡 ChromaCal: Verify Failed",
+            notification_id=_verify_notification_id(light_entity),
+        )
+
+    def verify_state_for(self, light_entity: str) -> VerifyState | None:
+        """This light's most recent verify-and-retry outcome, if any --
+        read by sensor.py to expose real state (Plan B's future schedule
+        panel needs this for an honest "Verify Off" row) instead of the
+        private _verify_state dict being reached into directly."""
+        return self._verify_state.get(light_entity)
 
     async def async_recheck_color_cycle(self, now: datetime) -> None:
         """Re-fire a stable multi-color 'event:X' key when its active color
@@ -828,7 +999,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
 
                 if command is None:
                     continue
-                await self._call_fire_command(light_entity, light, desired_key, command)
+                await self._call_fire_command_verified(light_entity, light, desired_key, command)
             except Exception:
                 _LOGGER.exception(
                     "ChromaCal: force-fire failed resolving %s -- other lights still processed",
@@ -1093,7 +1264,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             source=_OVERRIDE_SOURCE_FORCE_WHITE,
             expires_at=dt_util.now() + timedelta(minutes=FORCE_WHITE_OVERRIDE_MINUTES),
         )
-        await self._call_fire_command(light_entity, light, "force_white", command)
+        await self._call_fire_command_verified(light_entity, light, "force_white", command)
 
         async def _resume(_now: datetime) -> None:
             # Ownership-aware: if Salute or Emergency took over this light

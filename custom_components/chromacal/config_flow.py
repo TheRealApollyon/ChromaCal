@@ -49,6 +49,9 @@ from .const import (
     CONF_REGION,
     CONF_START_TIME,
     CONF_START_TYPE,
+    CONF_VERIFY_CHECK_DELAY,
+    CONF_VERIFY_ENABLED,
+    CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
     CONF_WARMWHITE_TIME,
     CONF_ZONE,
@@ -56,6 +59,8 @@ from .const import (
     DEFAULT_FADE_IN,
     DEFAULT_FADE_OUT,
     DEFAULT_START_TIME,
+    DEFAULT_VERIFY_CHECK_DELAY,
+    DEFAULT_VERIFY_RETRY_COUNT,
     DEFAULT_WARMWHITE_TIME,
     DOMAIN,
     END_TYPES,
@@ -64,6 +69,8 @@ from .const import (
     LIGHT_SUBENTRY_TYPE,
     REGIONS,
     START_TYPES,
+    VERIFY_CHECK_DELAY_OPTIONS,
+    VERIFY_RETRY_COUNT_OPTIONS,
 )
 
 
@@ -158,6 +165,27 @@ def _light_schema(light: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(
                 CONF_WARMWHITE_ENABLED, default=light.get(CONF_WARMWHITE_ENABLED, True)
             ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_VERIFY_ENABLED, default=light.get(CONF_VERIFY_ENABLED, True)
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_VERIFY_RETRY_COUNT,
+                default=str(light.get(CONF_VERIFY_RETRY_COUNT, DEFAULT_VERIFY_RETRY_COUNT)),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[str(v) for v in VERIFY_RETRY_COUNT_OPTIONS],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                CONF_VERIFY_CHECK_DELAY,
+                default=str(light.get(CONF_VERIFY_CHECK_DELAY, DEFAULT_VERIFY_CHECK_DELAY)),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[str(v) for v in VERIFY_CHECK_DELAY_OPTIONS],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
         }
     )
 
@@ -177,6 +205,9 @@ def _light_dict_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_FADE_OUT: int(user_input[CONF_FADE_OUT]),
         CONF_WARMWHITE_TIME: user_input.get(CONF_WARMWHITE_TIME, DEFAULT_WARMWHITE_TIME),
         CONF_WARMWHITE_ENABLED: user_input[CONF_WARMWHITE_ENABLED],
+        CONF_VERIFY_ENABLED: user_input[CONF_VERIFY_ENABLED],
+        CONF_VERIFY_RETRY_COUNT: int(user_input[CONF_VERIFY_RETRY_COUNT]),
+        CONF_VERIFY_CHECK_DELAY: int(user_input[CONF_VERIFY_CHECK_DELAY]),
     }
 
 

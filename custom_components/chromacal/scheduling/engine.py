@@ -75,6 +75,9 @@ class LightConfig:
     fade_out: int = 120
     warmwhite_kelvin_mireds: int = 250
     warmwhite_color: str | None = None
+    verify_enabled: bool = True
+    verify_retry_count: int = 2
+    verify_check_delay: int = 180
 
 
 def get_enabled_holidays(config: ScheduleConfig, year: int) -> list[HolidayEvent]:

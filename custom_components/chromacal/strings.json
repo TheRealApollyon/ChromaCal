@@ -74,7 +74,10 @@
             "fade_in": "Fade in (seconds)",
             "fade_out": "Fade out (seconds)",
             "warmwhite_time": "Warm white cutoff time",
-            "warmwhite_enabled": "Enable warm white cutoff"
+            "warmwhite_enabled": "Enable warm white cutoff",
+            "verify_enabled": "Verify on/off after firing",
+            "verify_retry_count": "Retry attempts",
+            "verify_check_delay": "Initial check delay (seconds)"
           }
         },
         "reconfigure": {
@@ -91,7 +94,10 @@
             "fade_in": "Fade in (seconds)",
             "fade_out": "Fade out (seconds)",
             "warmwhite_time": "Warm white cutoff time",
-            "warmwhite_enabled": "Enable warm white cutoff"
+            "warmwhite_enabled": "Enable warm white cutoff",
+            "verify_enabled": "Verify on/off after firing",
+            "verify_retry_count": "Retry attempts",
+            "verify_check_delay": "Initial check delay (seconds)"
           }
         }
       },

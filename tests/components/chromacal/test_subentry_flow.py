@@ -18,6 +18,9 @@ from custom_components.chromacal.const import (
     CONF_FADE_OUT,
     CONF_NAME,
     CONF_START_TYPE,
+    CONF_VERIFY_CHECK_DELAY,
+    CONF_VERIFY_ENABLED,
+    CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
     DOMAIN,
     LIGHT_SUBENTRY_TYPE,
@@ -137,9 +140,55 @@ async def test_edit_light_updates_its_subentry_data(hass, freezer):
     subentry = live_entry.subentries[subentry_id]
     assert subentry.data[CONF_NAME] == "Front Porch Renamed"
     assert subentry.data[CONF_FADE_IN] == 60
+
+    # Verify-and-retry fields weren't in this submission -- confirms the
+    # schema's own defaults filled them in rather than the field going
+    # missing or raising, same mechanism fade_in/fade_out already rely on.
+    assert subentry.data[CONF_VERIFY_ENABLED] is True
+    assert subentry.data[CONF_VERIFY_RETRY_COUNT] == 2
+    assert subentry.data[CONF_VERIFY_CHECK_DELAY] == 180
     assert subentry.title == "Front Porch Renamed"
     # Editing does NOT create a second subentry -- same subentry_id.
     assert len(live_entry.subentries) == 1
+
+
+async def test_verify_fields_can_be_set_explicitly(hass, freezer):
+    """A light added with verify-and-retry deliberately disabled, or with
+    non-default retry/delay values, keeps exactly what was chosen -- not
+    silently overwritten by the schema's own defaults."""
+    freezer.move_to("2026-07-04 12:00:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_verify_explicit")
+
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, LIGHT_SUBENTRY_TYPE),
+        context={"source": config_entries.SOURCE_USER},
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Back Yard",
+            CONF_ENTITY: BACK_YARD_ENTITY,
+            CONF_START_TYPE: "sunset",
+            CONF_END_TYPE: "time",
+            CONF_FADE_IN: "30",
+            CONF_FADE_OUT: "120",
+            CONF_WARMWHITE_ENABLED: True,
+            CONF_VERIFY_ENABLED: False,
+            CONF_VERIFY_RETRY_COUNT: "3",
+            CONF_VERIFY_CHECK_DELAY: "60",
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    live_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    back_yard = next(
+        s for s in live_entry.subentries.values() if s.data[CONF_NAME] == "Back Yard"
+    )
+    assert back_yard.data[CONF_VERIFY_ENABLED] is False
+    assert back_yard.data[CONF_VERIFY_RETRY_COUNT] == 3
+    assert back_yard.data[CONF_VERIFY_CHECK_DELAY] == 60
 
 
 async def test_removing_a_light_stops_it_being_scheduled_without_a_reload(hass, freezer):

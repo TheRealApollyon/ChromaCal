@@ -57,6 +57,17 @@ CONF_FADE_OUT = "fade_out"
 CONF_WARMWHITE_TIME = "warmwhite_time"
 CONF_WARMWHITE_ENABLED = "warmwhite_enabled"
 
+# Verify-and-retry (Plan A): after firing a real on/off transition, confirm
+# the light actually reports the intended state instead of just trusting
+# the service call landed -- see coordinator.py's _call_fire_command_verified
+# docstring. Defaults sourced from Shane's own "Outside Lights - Late Night
+# Off" automation (real hardware-proven values, not invented) -- see
+# CLAUDE.md's root-cause writeup for the light flip-back investigation this
+# feature exists to catch.
+CONF_VERIFY_ENABLED = "verify_enabled"
+CONF_VERIFY_RETRY_COUNT = "verify_retry_count"
+CONF_VERIFY_CHECK_DELAY = "verify_check_delay"
+
 # ── Regions — matches the 8 wizard region tiles in chromacal.html ──
 REGIONS = {
     "us": "United States",
@@ -88,6 +99,11 @@ END_TYPES = ["time", "sunrise", "civil_dawn", "never"]
 # Matches the <select> options in the v1 wizard's Step 5 (fade in/out dropdowns)
 FADE_IN_OPTIONS = [0, 15, 30, 60, 120]
 FADE_OUT_OPTIONS = [0, 30, 60, 120]
+
+# Verify-and-retry dropdowns -- 0 retries is a valid choice (check once,
+# notify immediately on mismatch, no re-fire).
+VERIFY_RETRY_COUNT_OPTIONS = [0, 1, 2, 3]
+VERIFY_CHECK_DELAY_OPTIONS = [60, 120, 180, 300]
 
 # ── Sidebar panel (Phase 6) ──────────────────────────────────────
 PANEL_URL_PATH = "chromacal"
@@ -143,3 +159,5 @@ DEFAULT_END_TIME = "23:00"
 DEFAULT_FADE_IN = 30
 DEFAULT_FADE_OUT = 120
 DEFAULT_WARMWHITE_TIME = "22:00"
+DEFAULT_VERIFY_RETRY_COUNT = 2
+DEFAULT_VERIFY_CHECK_DELAY = 180

@@ -65,4 +65,7 @@ def build_light_config(light_data: dict[str, Any]) -> LightConfig:
         warmwhite_time=light_data.get("warmwhite_time"),
         fade_in=light_data.get("fade_in", 30),
         fade_out=light_data.get("fade_out", 120),
+        verify_enabled=light_data.get("verify_enabled", True),
+        verify_retry_count=light_data.get("verify_retry_count", 2),
+        verify_check_delay=light_data.get("verify_check_delay", 180),
     )

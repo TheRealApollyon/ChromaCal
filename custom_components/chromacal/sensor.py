@@ -136,6 +136,19 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             ],
         }
 
+        # Verify-and-retry (Plan A) -- real state for a future panel
+        # surface to bind to, not a placeholder. None until the first
+        # on/off transition after this coordinator started, same as
+        # segments/current_segment above being empty before the first
+        # refresh -- not a bug, just nothing to report yet.
+        verify = self.coordinator.verify_state_for(self._light_entity)
+        if verify is not None:
+            attrs["verify_result"] = verify.result
+            attrs["verify_checked_at"] = (
+                verify.checked_at.isoformat() if verify.checked_at else None
+            )
+            attrs["verify_attempts_used"] = verify.attempts_used
+
         current = schedule.current_segment
         if current is not None:
             attrs["event_type"] = current.event.event_type
