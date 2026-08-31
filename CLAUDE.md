@@ -842,6 +842,50 @@ if actually needed in practice, not preemptively.
   check anywhere -- confirmed via a full-tree grep of
   `custom_components/chromacal`, not just absence of memory.
 
+## Tooling gotchas found building Plan A (verify-and-retry)
+
+**`grep -c $'\r'` is unreliable for detecting CRLF in this shell session --
+don't trust it.** This repo is strict LF (`core.autocrlf` is `false`, no
+`.gitattributes`), and the `Edit`/`Write` tools have repeatedly introduced
+CRLF into files on this Windows machine -- confirmed multiple times this
+project by an anomalously large `git diff --stat` (insertions and
+deletions both near the file's total line count, for what should have
+been a small, localized change). The instinctive check,
+`grep -c $'\r' <file>`, turned out to give **false readings in this
+specific shell**: directly tested by writing a synthetic file with real
+`\r\n` line endings (confirmed via `od -c` and `file`, which explicitly
+reports "with CRLF line terminators" when it's actually present) --
+`grep -c $'\r'` reported `0` on that genuinely-CRLF file, and separately
+reported large nonzero counts on files independently confirmed clean.
+Not correlated with real file content at all in this session.
+
+**Use instead:** `file <path>` -- fast, one line per file, and states
+"CRLF line terminators" explicitly and unambiguously when present, says
+nothing about it when the file is clean LF. For byte-level certainty
+beyond that, `od -c <path> | grep '\r'` shows the raw bytes directly.
+`git diff --stat` proportionality (does the diff size roughly match the
+real edit, not the whole file) is still a good cheap tripwire that
+something's wrong, but doesn't itself confirm CRLF is the cause -- `file`
+does that.
+
+**A ~30-minute disposable-container "stall" during Plan A's live
+verification remains not fully explained -- record what's actually
+proven, not more.** A fully-instrumented diagnostic trace (temporary log
+lines at every step of the verify-and-retry chain) showed the mechanism
+working correctly end to end on the very next attempt: every scheduled
+callback fired exactly on time, zero exceptions anywhere, and the real
+failure notification landed with the correct content. That **rules out**
+both suspected code bugs (the scheduling call never being reached; the
+callback's reference being garbage-collected) -- confirmed, not
+speculated. What is *not* confirmed is why the first attempt sat silent
+for 30 minutes with the container's own CPU usage near-zero and no
+errors logged: Docker Desktop's VM being throttled or suspended during
+the long unattended wait is the most plausible explanation given
+everything else was proven sound, but there is no direct evidence for
+it -- no log line, no Docker event, nothing that actually shows the VM
+paused. Treat it as an open, low-priority environmental question, not a
+settled cause, if it ever needs revisiting.
+
 ## Suggested first session shape
 
 1. Read `chromacal.html` in full; inventory what needs porting (holiday
