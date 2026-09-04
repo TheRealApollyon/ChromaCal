@@ -1,4 +1,4 @@
-import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js";import{a as p}from"./chunk-JFKSI6I7.js";function Y(r){return{name:r.name,eventType:r.event_type,colors:r.colors,icon:r.icon,startTime:r.start_time,endTime:r.end_time}}function K(r){return Object.values(r.entities).filter(a=>a.platform==="chromacal").map(a=>a.entity_id)}function J(r){return r.split(".",1)[0]}function w(r){let a=K(r),e={saluteEntityId:null,saluteRunning:!1,catchUpEntityId:null,stopEntityId:null,emergencyEntityId:null,emergencyOn:!1},t=new Map,o=new Map,n=[],m=[],y=null,l=null;for(let i of a){let h=r.states[i];if(!h)continue;let d=h.attributes,g=J(i);if(g==="button"){let v=d.role;v==="salute"?(e.saluteEntityId=i,e.saluteRunning=!!d.running):v==="catch_up_sync"?e.catchUpEntityId=i:v==="stop"?e.stopEntityId=i:v==="force_white"&&typeof d.light_entity=="string"&&o.set(d.light_entity,i);continue}if(g==="switch"){let v=d.role;if(v==="emergency_mode")e.emergencyEntityId=i,e.emergencyOn=h.state==="on";else if(v==="skip"&&typeof d.event_name=="string"){let I={entityId:i,eventName:d.event_name,isOn:h.state==="on"};d.scope==="tonight"?n.push(I):m.push(I)}continue}g==="sensor"&&(d.role==="upcoming_events"?y=i:d.role==="house_view"?l=i:typeof d.light_entity=="string"&&t.set(d.light_entity,i))}let u=[];for(let[i,h]of t){let d=r.states[h],g=d?.attributes??{},v=g.light_name??i;u.push({lightEntity:i,lightName:v,scheduleEntityId:h,forceWhiteEntityId:o.get(i)??null,currentEventName:d?.state||null,currentEventType:g.event_type??null,currentColors:g.colors??[],currentIcon:g.icon??null,currentStart:g.start_time??null,currentEnd:g.end_time??null,segments:(g.segments??[]).map(Y),sunsetHour:g.sunset_hour??null,scheduleEndTime:g.schedule_end_time??null})}u.sort((i,h)=>i.lightName.localeCompare(h.lightName)),n.sort((i,h)=>i.eventName.localeCompare(h.eventName)),m.sort((i,h)=>i.eventName.localeCompare(h.eventName));let _=new Map(m.map(i=>[i.eventName,i])),B=new Map(n.map(i=>[i.eventName,i])),E=y?r.states[y]?.attributes:void 0,F=E?.events??[],G=E?.tonight_pick??null,j=E?.color_overrides??{},X=F.map(i=>({date:i.date,name:i.name,category:i.category,eventType:i.event_type,icon:i.icon,colors:i.colors,isToday:i.is_today,isPersonalRange:i.is_personal_range,permanentSkip:_.get(i.name)??null,tonightSkip:i.is_today?B.get(i.name)??null:null,isPicked:i.is_today&&G===i.name,overrideColors:j[i.name]??null})),S=l?r.states[l]?.attributes:void 0,q={mode:S?.mode??"2d",path:S?.path??"",markers:(S?.markers??[]).map(i=>({id:i.id,mode:i.mode,x:i.x,y:i.y,z:i.z,lightEntity:i.light_entity}))};return{globals:e,lights:u,tonightSkips:n,permanentSkips:m,upcomingEvents:X,houseView:q}}var L=x`
+import{a as _,b as s,c as b,d as z,e as C,f as E,g as f}from"./chunk-5VH4SVWE.js";import{a as u}from"./chunk-JFKSI6I7.js";function Y(r){return{name:r.name,eventType:r.event_type,colors:r.colors,icon:r.icon,startTime:r.start_time,endTime:r.end_time}}function K(r){return Object.values(r.entities).filter(c=>c.platform==="chromacal").map(c=>c.entity_id)}function J(r){return r.split(".",1)[0]}function k(r){let c=K(r),e={saluteEntityId:null,saluteRunning:!1,catchUpEntityId:null,stopEntityId:null,emergencyEntityId:null,emergencyOn:!1},t=new Map,o=new Map,a=[],m=[],y=null,x=null;for(let i of c){let h=r.states[i];if(!h)continue;let p=h.attributes,g=J(i);if(g==="button"){let v=p.role;v==="salute"?(e.saluteEntityId=i,e.saluteRunning=!!p.running):v==="catch_up_sync"?e.catchUpEntityId=i:v==="stop"?e.stopEntityId=i:v==="force_white"&&typeof p.light_entity=="string"&&o.set(p.light_entity,i);continue}if(g==="switch"){let v=p.role;if(v==="emergency_mode")e.emergencyEntityId=i,e.emergencyOn=h.state==="on";else if(v==="skip"&&typeof p.event_name=="string"){let R={entityId:i,eventName:p.event_name,isOn:h.state==="on"};p.scope==="tonight"?a.push(R):m.push(R)}continue}g==="sensor"&&(p.role==="upcoming_events"?y=i:p.role==="house_view"?x=i:typeof p.light_entity=="string"&&t.set(p.light_entity,i))}let w=[];for(let[i,h]of t){let p=r.states[h],g=p?.attributes??{},v=g.light_name??i;w.push({lightEntity:i,lightName:v,scheduleEntityId:h,forceWhiteEntityId:o.get(i)??null,currentEventName:p?.state||null,currentEventType:g.event_type??null,currentColors:g.colors??[],currentIcon:g.icon??null,currentStart:g.start_time??null,currentEnd:g.end_time??null,segments:(g.segments??[]).map(Y),sunsetHour:g.sunset_hour??null,scheduleEndTime:g.schedule_end_time??null})}w.sort((i,h)=>i.lightName.localeCompare(h.lightName)),a.sort((i,h)=>i.eventName.localeCompare(h.eventName)),m.sort((i,h)=>i.eventName.localeCompare(h.eventName));let $=new Map(m.map(i=>[i.eventName,i])),n=new Map(a.map(i=>[i.eventName,i])),d=y?r.states[y]?.attributes:void 0,T=d?.events??[],G=d?.tonight_pick??null,j=d?.color_overrides??{},X=T.map(i=>({date:i.date,name:i.name,category:i.category,eventType:i.event_type,icon:i.icon,colors:i.colors,isToday:i.is_today,isPersonalRange:i.is_personal_range,permanentSkip:$.get(i.name)??null,tonightSkip:i.is_today?n.get(i.name)??null:null,isPicked:i.is_today&&G===i.name,overrideColors:j[i.name]??null})),O=x?r.states[x]?.attributes:void 0,q={mode:O?.mode??"2d",path:O?.path??"",markers:(O?.markers??[]).map(i=>({id:i.id,mode:i.mode,x:i.x,y:i.y,z:i.z,lightEntity:i.light_entity}))};return{globals:e,lights:w,tonightSkips:a,permanentSkips:m,upcomingEvents:X,houseView:q}}var L=_`
   :host {
     --cc-bg: var(--primary-background-color, #fafafa);
     --cc-s1: var(--card-background-color, #fff);
@@ -13,7 +13,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
     --cc-font: inherit;
     --cc-radius: var(--ha-card-border-radius, 12px);
   }
-`,O=["native","daylight","twilight","scifi","mono"],R={native:"Match dashboard theme",daylight:"Daylight",twilight:"Twilight",scifi:"Sci-Fi",mono:"Mono"},z=x`
+`,I=["native","daylight","twilight","scifi","mono"],P={native:"Match dashboard theme",daylight:"Daylight",twilight:"Twilight",scifi:"Sci-Fi",mono:"Mono"},A=_`
   :host([data-theme="daylight"]) {
     --cc-bg: #f0f2f8;
     --cc-s1: #ffffff;
@@ -69,7 +69,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
     --cc-muted: #aaaaaa;
     --cc-font: "Orbitron", monospace;
   }
-`;function Q(r){let[a,e]=r.split(":").map(Number);return a*60+e}function H(r){return r>=960?r:r+1440}function A(r){return H(Math.round(r*60))}function k(r){return H(Q(r))}function C(r){return Math.max(0,Math.min(100,(r-960)/960*100))}function V(r,a){let e=C(k(r)),t=C(k(a));return{leftPct:e,widthPct:Math.max(0,t-e)}}function P(r){let a=Math.round(r*60)%1440,e=Math.floor(a/60),t=a%60;return`${String(e).padStart(2,"0")}:${String(t).padStart(2,"0")}`}function W(r,a){let e=A(a),t=[{label:"NOW",time:P(a),windowMinutes:e,emphasize:!1}];if(r.sunsetHour!==null){let l=A(r.sunsetHour);l>e&&t.push({label:"SUNSET",time:P(r.sunsetHour),windowMinutes:l,emphasize:!1})}let o=r.segments[0];if(o){let l=k(o.startTime);l>e&&t.push({label:"COLORS",time:o.startTime,windowMinutes:l,emphasize:!1})}let n=r.segments[r.segments.length-1];if(n){let l=k(n.endTime),u=r.scheduleEndTime!==null?k(r.scheduleEndTime):null;u!==null&&l<u?(t.push({label:"WARM",time:n.endTime,windowMinutes:l,emphasize:!1}),t.push({label:"OFF",time:r.scheduleEndTime,windowMinutes:u,emphasize:!0})):t.push({label:"OFF",time:n.endTime,windowMinutes:l,emphasize:!0})}let m=9,y=-999;return t.sort((l,u)=>l.windowMinutes-u.windowMinutes).map(l=>{let u=C(l.windowMinutes),_=u-y<m;return _||(y=u),{...l,leftPct:u,bare:_}})}var U="chromacal-panel-theme-preset",Z=5;function D(r,a){let e=r.replace("#",""),t=parseInt(e,16),o=t>>16&255,n=t>>8&255,m=t&255;return`rgba(${o}, ${n}, ${m}, ${a})`}var c=class extends N{constructor(){super(...arguments);this.narrow=!1;this._themePreset="native";this._skipFilter="";this._manageSkipsOpen=!1;this._controlsOpen=!1;this._houseViewOpen=!1;this._colorModalEvent=null;this._colorModalColors=[];this._colorModalPickerValue="#ffffff"}connectedCallback(){super.connectedCallback();let e=localStorage.getItem(U);e&&O.includes(e)&&(this._themePreset=e),this._applyThemeAttribute()}_applyThemeAttribute(){this._themePreset==="native"?this.removeAttribute("data-theme"):this.setAttribute("data-theme",this._themePreset)}_onThemeChange(e){let t=e.target.value;this._themePreset=t,localStorage.setItem(U,t),this._applyThemeAttribute()}_callService(e,t,o){o&&this.hass.callService(e,t,{entity_id:o})}_pressButton(e){this._callService("button","press",e)}_toggleSwitch(e,t){this._callService("switch",t?"turn_off":"turn_on",e)}_onHouseViewToggle(e){let t=e.target.open;this._houseViewOpen=t,t&&import("./house-view-BW6Y22GU.js")}_setTonightPick(e){this.hass.callService("chromacal","set_tonight_pick",{event_name:e})}_openColorModal(e){this._colorModalEvent=e.name,this._colorModalColors=[...e.overrideColors??e.colors]}_closeColorModal(){this._colorModalEvent=null,this._colorModalColors=[]}_addColorModalColor(){this._colorModalColors.length>=c.MAX_COLORS||(this._colorModalColors=[...this._colorModalColors,this._colorModalPickerValue])}_removeColorModalColor(e){this._colorModalColors=this._colorModalColors.filter((t,o)=>o!==e)}_moveColorModalColor(e,t){let o=e+t;if(o<0||o>=this._colorModalColors.length)return;let n=[...this._colorModalColors];[n[e],n[o]]=[n[o],n[e]],this._colorModalColors=n}_saveColorOverride(){!this._colorModalEvent||this._colorModalColors.length===0||(this.hass.callService("chromacal","set_color_override",{event_name:this._colorModalEvent,colors:this._colorModalColors}),this._closeColorModal())}_resetColorOverride(){this._colorModalEvent&&(this.hass.callService("chromacal","reset_color_override",{event_name:this._colorModalEvent}),this._closeColorModal())}render(){if(!this.hass)return b;let e=w(this.hass);return s`
+`;function Q(r){let[c,e]=r.split(":").map(Number);return c*60+e}function W(r){return r>=960?r:r+1440}function H(r){return W(Math.round(r*60))}function M(r){return W(Q(r))}function N(r){return Math.max(0,Math.min(100,(r-960)/960*100))}function U(r,c){let e=N(M(r)),t=N(M(c));return{leftPct:e,widthPct:Math.max(0,t-e)}}function V(r){let c=Math.round(r*60)%1440,e=Math.floor(c/60),t=c%60;return`${String(e).padStart(2,"0")}:${String(t).padStart(2,"0")}`}function D(r,c){let e=H(c),t=[],o=r.segments[r.segments.length-1];if(o){let n=M(o.endTime),d=r.scheduleEndTime!==null?M(r.scheduleEndTime):null;d!==null&&n<d?(t.push({label:"WARM",time:o.endTime,windowMinutes:n,emphasize:!1,priority:0}),t.push({label:"OFF",time:r.scheduleEndTime,windowMinutes:d,emphasize:!0,priority:0})):t.push({label:"OFF",time:o.endTime,windowMinutes:n,emphasize:!0,priority:0})}if(t.push({label:"NOW",time:V(c),windowMinutes:e,emphasize:!1,priority:1}),r.sunsetHour!==null){let n=H(r.sunsetHour);n>e&&t.push({label:"SUNSET",time:V(r.sunsetHour),windowMinutes:n,emphasize:!1,priority:2})}let a=r.segments[0];if(a){let n=M(a.startTime);n>e&&t.push({label:"COLORS",time:a.startTime,windowMinutes:n,emphasize:!1,priority:2})}let m=9,y=t.map(n=>({...n,leftPct:N(n.windowMinutes)})),x=[...y].sort((n,d)=>n.priority-d.priority||n.windowMinutes-d.windowMinutes),w=[],$=new Map;for(let n of x){let d=n.priority>0&&w.some(T=>Math.abs(n.leftPct-T)<m);$.set(n,d),d||w.push(n.leftPct)}return y.sort((n,d)=>n.windowMinutes-d.windowMinutes).map(n=>({label:n.label,time:n.time,windowMinutes:n.windowMinutes,leftPct:n.leftPct,emphasize:n.emphasize,bare:$.get(n)??!1}))}var B="chromacal-panel-theme-preset",Z=5;function F(r,c){let e=r.replace("#",""),t=parseInt(e,16),o=t>>16&255,a=t>>8&255,m=t&255;return`rgba(${o}, ${a}, ${m}, ${c})`}var l=class extends z{constructor(){super(...arguments);this.narrow=!1;this._themePreset="native";this._skipFilter="";this._manageSkipsOpen=!1;this._controlsOpen=!1;this._houseViewOpen=!1;this._colorModalEvent=null;this._colorModalColors=[];this._colorModalPickerValue="#ffffff"}connectedCallback(){super.connectedCallback();let e=localStorage.getItem(B);e&&I.includes(e)&&(this._themePreset=e),this._applyThemeAttribute()}_applyThemeAttribute(){this._themePreset==="native"?this.removeAttribute("data-theme"):this.setAttribute("data-theme",this._themePreset)}_onThemeChange(e){let t=e.target.value;this._themePreset=t,localStorage.setItem(B,t),this._applyThemeAttribute()}_callService(e,t,o){o&&this.hass.callService(e,t,{entity_id:o})}_pressButton(e){this._callService("button","press",e)}_toggleSwitch(e,t){this._callService("switch",t?"turn_off":"turn_on",e)}_onHouseViewToggle(e){let t=e.target.open;this._houseViewOpen=t,t&&import("./house-view-BW6Y22GU.js")}_setTonightPick(e){this.hass.callService("chromacal","set_tonight_pick",{event_name:e})}_openColorModal(e){this._colorModalEvent=e.name,this._colorModalColors=[...e.overrideColors??e.colors]}_closeColorModal(){this._colorModalEvent=null,this._colorModalColors=[]}_addColorModalColor(){this._colorModalColors.length>=l.MAX_COLORS||(this._colorModalColors=[...this._colorModalColors,this._colorModalPickerValue])}_removeColorModalColor(e){this._colorModalColors=this._colorModalColors.filter((t,o)=>o!==e)}_moveColorModalColor(e,t){let o=e+t;if(o<0||o>=this._colorModalColors.length)return;let a=[...this._colorModalColors];[a[e],a[o]]=[a[o],a[e]],this._colorModalColors=a}_saveColorOverride(){!this._colorModalEvent||this._colorModalColors.length===0||(this.hass.callService("chromacal","set_color_override",{event_name:this._colorModalEvent,colors:this._colorModalColors}),this._closeColorModal())}_resetColorOverride(){this._colorModalEvent&&(this.hass.callService("chromacal","reset_color_override",{event_name:this._colorModalEvent}),this._closeColorModal())}render(){if(!this.hass)return b;let e=k(this.hass);return s`
       <div class="root">
         <header>
           <h1>ChromaCal</h1>
@@ -106,8 +106,8 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
             <label class="theme-picker">
               <span class="visually-hidden">Panel theme</span>
               <select @change=${this._onThemeChange} .value=${this._themePreset}>
-                ${O.map(t=>s`<option value=${t} ?selected=${t===this._themePreset}>
-                    ${R[t]}
+                ${I.map(t=>s`<option value=${t} ?selected=${t===this._themePreset}>
+                    ${P[t]}
                   </option>`)}
               </select>
             </label>
@@ -192,29 +192,29 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
           <p class="modal-event-name">${e}</p>
 
           <div class="modal-chip-row">
-            ${t.length===0?s`<p class="muted">No colors -- add at least one below.</p>`:t.map((o,n)=>s`
+            ${t.length===0?s`<p class="muted">No colors -- add at least one below.</p>`:t.map((o,a)=>s`
                     <div class="modal-chip-item">
                       <span class="modal-chip" style="background:${o}" title=${o}></span>
                       <div class="modal-chip-btns">
                         <button
                           class="chip-move-btn"
-                          ?disabled=${n===0}
-                          @click=${()=>this._moveColorModalColor(n,-1)}
+                          ?disabled=${a===0}
+                          @click=${()=>this._moveColorModalColor(a,-1)}
                           title="Move left"
                         >
                           ‹
                         </button>
                         <button
                           class="chip-move-btn chip-remove-btn"
-                          @click=${()=>this._removeColorModalColor(n)}
+                          @click=${()=>this._removeColorModalColor(a)}
                           title="Remove"
                         >
                           ×
                         </button>
                         <button
                           class="chip-move-btn"
-                          ?disabled=${n===t.length-1}
-                          @click=${()=>this._moveColorModalColor(n,1)}
+                          ?disabled=${a===t.length-1}
+                          @click=${()=>this._moveColorModalColor(a,1)}
                           title="Move right"
                         >
                           ›
@@ -232,7 +232,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
             />
             <button
               class="control-btn"
-              ?disabled=${t.length>=c.MAX_COLORS}
+              ?disabled=${t.length>=l.MAX_COLORS}
               @click=${this._addColorModalColor}
             >
               Add color
@@ -261,7 +261,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
         <span class="up-name">${e.name}</span>
         <span class="up-badge">${e.category}</span>
         <span class="up-chips">
-          ${e.colors.map(n=>s`<span class="up-chip" style="background:${n}"></span>`)}
+          ${e.colors.map(a=>s`<span class="up-chip" style="background:${a}"></span>`)}
         </span>
         ${e.isToday&&!t?.isOn&&!o?.isOn?s`<button
               class="up-action-btn ${e.isPicked?"active":""}"
@@ -300,7 +300,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
       >
         ${e.eventName}
       </button>
-    `}_renderOrb(e,t){let o=e.currentColors[0],n=e.currentColors.length>=Z,m=o?`background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.45) 0%, ${o} 45%, rgba(0,0,0,.5) 100%); box-shadow: 0 0 ${t==="full"?"24px":"12px"} ${D(o,.627)}, 0 0 ${t==="full"?"46px":"23px"} ${D(o,.208)};`:"";return s`<div class="orb ${t} ${n?"spinning":""}" style=${m}></div>`}_renderLightGrid(e){return e.lights.length===0?s`<div class="empty-state">
+    `}_renderOrb(e,t){let o=e.currentColors[0],a=e.currentColors.length>=Z,m=o?`background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.45) 0%, ${o} 45%, rgba(0,0,0,.5) 100%); box-shadow: 0 0 ${t==="full"?"24px":"12px"} ${F(o,.627)}, 0 0 ${t==="full"?"46px":"23px"} ${F(o,.208)};`:"";return s`<div class="orb ${t} ${a?"spinning":""}" style=${m}></div>`}_renderLightGrid(e){return e.lights.length===0?s`<div class="empty-state">
         <p>No lights configured yet.</p>
         <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
       </div>`:s`<section class="light-grid ${this.narrow?"narrow":""}">
@@ -313,7 +313,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
             <span class="event-name-headline compact">${e.currentEventName??"\u2014"}</span>
           </div>
         </div>
-      `;let t=W(e,new Date().getHours()+new Date().getMinutes()/60);return s`
+      `;let t=D(e,new Date().getHours()+new Date().getMinutes()/60);return s`
       <div class="light-card">
         <div class="card-top">
           ${this._renderOrb(e,"full")}
@@ -333,9 +333,9 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
         </div>
         ${e.segments.length>0?s`<div class="timeline-wrapper">
               <div class="timeline">
-                ${e.segments.map(o=>{let{leftPct:n,widthPct:m}=V(o.startTime,o.endTime),y=o.name===e.currentEventName;return s`<div
+                ${e.segments.map(o=>{let{leftPct:a,widthPct:m}=U(o.startTime,o.endTime),y=o.name===e.currentEventName;return s`<div
                     class="timeline-seg ${y?"current":""}"
-                    style="left:${n}%; width:${m}%; background:${o.colors[0]??"var(--cc-s2)"}"
+                    style="left:${a}%; width:${m}%; background:${o.colors[0]??"var(--cc-s2)"}"
                     title="${o.name} (${o.startTime}–${o.endTime})"
                   ></div>`})}
               </div>
@@ -351,7 +351,7 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
               </div>
             </div>`:b}
       </div>
-    `}};c.MAX_COLORS=6,c.styles=[L,z,x`
+    `}};l.MAX_COLORS=6,l.styles=[L,A,_`
       :host {
         display: block;
         font-family: var(--cc-font);
@@ -1034,8 +1034,8 @@ import{a as x,b as s,c as b,d as N,e as T,f as M,g as f}from"./chunk-5VH4SVWE.js
       .card-content {
         padding: 0 16px 16px;
       }
-    `],p([M({attribute:!1})],c.prototype,"hass",2),p([M({type:Boolean})],c.prototype,"narrow",2),p([M({attribute:!1})],c.prototype,"panel",2),p([f()],c.prototype,"_themePreset",2),p([f()],c.prototype,"_skipFilter",2),p([f()],c.prototype,"_manageSkipsOpen",2),p([f()],c.prototype,"_controlsOpen",2),p([f()],c.prototype,"_houseViewOpen",2),p([f()],c.prototype,"_colorModalEvent",2),p([f()],c.prototype,"_colorModalColors",2),p([f()],c.prototype,"_colorModalPickerValue",2),c=p([T("chromacal-panel")],c);var $=class extends c{constructor(){super(),this.narrow=!0}setConfig(a){}static getStubConfig(){return{}}getCardSize(){return this.hass?Math.max(1,w(this.hass).lights.length):1}getGridOptions(){return{rows:this.hass?Math.max(1,w(this.hass).lights.length):1,columns:6,min_rows:1}}render(){if(!this.hass)return b;let a=w(this.hass);return s`
+    `],u([E({attribute:!1})],l.prototype,"hass",2),u([E({type:Boolean})],l.prototype,"narrow",2),u([E({attribute:!1})],l.prototype,"panel",2),u([f()],l.prototype,"_themePreset",2),u([f()],l.prototype,"_skipFilter",2),u([f()],l.prototype,"_manageSkipsOpen",2),u([f()],l.prototype,"_controlsOpen",2),u([f()],l.prototype,"_houseViewOpen",2),u([f()],l.prototype,"_colorModalEvent",2),u([f()],l.prototype,"_colorModalColors",2),u([f()],l.prototype,"_colorModalPickerValue",2),l=u([C("chromacal-panel")],l);var S=class extends l{constructor(){super(),this.narrow=!0}setConfig(c){}static getStubConfig(){return{}}getCardSize(){return this.hass?Math.max(1,k(this.hass).lights.length):1}getGridOptions(){return{rows:this.hass?Math.max(1,k(this.hass).lights.length):1,columns:6,min_rows:1}}render(){if(!this.hass)return b;let c=k(this.hass);return s`
       <ha-card header="ChromaCal">
-        <div class="card-content">${this._renderLightGrid(a)}</div>
+        <div class="card-content">${this._renderLightGrid(c)}</div>
       </ha-card>
-    `}};$=p([T("chromacal-card")],$);window.customCards=window.customCards||[];window.customCards.push({type:"chromacal-card",name:"ChromaCal",description:"Compact status for your ChromaCal lights."});export{$ as ChromaCalCard,c as ChromaCalPanel};
+    `}};S=u([C("chromacal-card")],S);window.customCards=window.customCards||[];window.customCards.push({type:"chromacal-card",name:"ChromaCal",description:"Compact status for your ChromaCal lights."});export{S as ChromaCalCard,l as ChromaCalPanel};
