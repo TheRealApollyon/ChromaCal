@@ -204,6 +204,30 @@ def test_warmwhite_cutoff_shortens_color_window_before_end_time():
     assert segments[0].end_hour == 20.0  # warm-white cutoff, earlier than the 23:00 end time
 
 
+def test_warmwhite_time_with_seconds_does_not_crash_and_parses_the_same():
+    """Real regression, 2026-09-03: HA's TimeSelector submitted "22:00:00"
+    instead of "22:00" for a real Pi's stored warmwhite_time, crashing
+    every coordinator refresh with `too many values to unpack` out of
+    _parse_hour's bare 2-value unpack. "HH:MM:SS" must parse identically
+    to the equivalent "HH:MM", not just avoid crashing.
+    """
+    holiday = HolidayEvent(11, 10, 10, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")
+
+    clean = LightConfig(name="Porch", end_type="time", end_time="23:00", warmwhite_enabled=True, warmwhite_time="20:00")
+    with_seconds = LightConfig(name="Porch", end_type="time", end_time="23:00", warmwhite_enabled=True, warmwhite_time="20:00:00")
+
+    clean_segments = get_night_segments(NOW, clean, ScheduleConfig(), [holiday], sunset_hour=18.0)
+    seconds_segments = get_night_segments(NOW, with_seconds, ScheduleConfig(), [holiday], sunset_hour=18.0)
+
+    assert seconds_segments[0].end_hour == clean_segments[0].end_hour == 20.0
+
+
+def test_resolve_cfg_end_hour_with_seconds_does_not_crash_and_parses_the_same():
+    clean = LightConfig(end_type="time", end_time="23:00")
+    with_seconds = LightConfig(end_type="time", end_time="23:00:00")
+    assert resolve_cfg_end_hour(with_seconds) == resolve_cfg_end_hour(clean) == 23
+
+
 def test_start_offset_delays_color_start_after_sunset():
     light = LightConfig(name="Porch", end_type="time", end_time="23:00", warmwhite_enabled=False, start_offset=30)
     holiday = HolidayEvent(11, 10, 10, "Some Holiday", "federal", "🎆", ("#000000",), "holiday")

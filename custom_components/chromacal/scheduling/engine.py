@@ -263,7 +263,17 @@ def _to_segment_event(h: HolidayEvent) -> SegmentEvent:
 
 
 def _parse_hour(time_str: str) -> float:
-    hh, mm = time_str.split(":")
+    """"HH:MM" -> decimal hour. Only the hour and minute are ever used --
+    `split(":")[:2]`, not a bare 2-value unpack, because HA's own
+    TimeSelector has been observed submitting "HH:MM:SS" instead of
+    "HH:MM" (confirmed live, 2026-09-03: a real Pi's stored
+    warmwhite_time of "22:00:00" crashed every coordinator refresh with
+    `too many values to unpack`, from a plain `hh, mm = time_str.split(":")`
+    here -- this is the only place in the whole integration that parses a
+    configured time string into hour math, so this one fix covers every
+    caller, not just warmwhite_time's).
+    """
+    hh, mm = time_str.split(":")[:2]
     return int(hh) + int(mm) / 60
 
 
@@ -274,10 +284,13 @@ def resolve_cfg_end_hour(light: LightConfig) -> float:
     Was duplicated verbatim inside get_night_segments and
     get_desired_fire_key; extracted so sensor.py can also expose it (as
     schedule_end_time) without a third copy of the same four lines.
+    Routed through _parse_hour (truncated to an int) rather than its own
+    parsing, so it gets the same "HH:MM:SS" tolerance for free instead of
+    being a second, independently-fragile place to fix later.
     """
     if light.end_type == "time" and light.end_time:
         try:
-            return int(light.end_time.split(":")[0])
+            return int(_parse_hour(light.end_time))
         except ValueError:
             return 23
     return 23
