@@ -903,3 +903,61 @@ settled cause, if it ever needs revisiting.
 6. Only after the backend is verified stable in the disposable instance:
    build the Lovelace panel component, theme-native by default per the
    styling decision above, then move the whole thing to the real Pi.
+
+## Real incident, 2026-09-03 — ChromaCal crash-looped on the real Pi from a latent `_parse_hour` bug, triggered by editing a light via the UI
+
+ChromaCal disappeared from the real Pi entirely -- stuck in HA's
+exponential-backoff config-entry retry loop, failing every attempt with
+`too many values to unpack (expected 2, got 3)` in `_parse_hour`
+(`scheduling/engine.py`). Root cause, found from the real stored config
+data, not inferred: Shane edited a light's warm-white cutoff time via
+the reconfigure flow, and HA's `TimeSelector` submitted `"22:00:00"`
+instead of `"22:00"` -- a real, observed HA frontend quirk, not
+ChromaCal's own doing. `_parse_hour`'s `hh, mm = time_str.split(":")`
+had no tolerance for a trailing seconds component, so every single
+coordinator refresh crashed on that value.
+
+Confirmed via git history that this predates the whole session,
+including Plan A and the color/gamut work, neither of which touched
+`warmwhite_time` or `engine.py`'s time parsing at all: `_parse_hour` is
+byte-identical to the very first Python commit of this project (Phase
+2a) -- a latent bug since the beginning, sitting dormant until a real
+user edit happened to produce the one input shape it never handled.
+
+**Fix**: `_parse_hour` now takes only the first two colon-separated
+parts (`time_str.split(":")[:2]`), tolerant of a trailing seconds
+component. `resolve_cfg_end_hour` now routes through it too, so the one
+fix covers every place a configured time string enters the system --
+confirmed via a full-integration grep that these are the only two call
+sites that ever parse a time string into hour math.
+
+**Worth remembering for any future time-shaped config field**: HA's
+`TimeSelector` can submit `"HH:MM:SS"` instead of `"HH:MM"` -- this
+isn't unique to `warmwhite_time`. Any new field using the same selector
+should either parse defensively (like the fix above) or normalize the
+value at the point it's stored, not assume the widget always returns
+exactly two colon-separated parts.
+
+**Verified against the real failure, not just unit tests**: reproduced
+the exact crash first, in the disposable multi-light container, against
+the *unmodified* code with the light's `warmwhite_time` set to the
+literal corrupted value -- byte-for-byte the same traceback as the real
+Pi. Then confirmed zero crashes and full working coordinator cycles with
+the fix applied, same container, same corrupted value, before this ever
+went near the real Pi again.
+
+Two things caught *during* that verification, worth remembering
+separately:
+- A second occurrence of the disposable container silently stalling for
+  several minutes at HA's very earliest boot stage (before any component
+  "Setting up" line, chromacal or otherwise) -- resolved on its own
+  without intervention. Consistent with the already-documented
+  environmental stall above, not a new, separate issue, but recorded
+  here since it happened three times in a row this incident (two fresh
+  containers, one restart) before resolving -- more repetitions than the
+  original single occurrence, though still with zero direct evidence of
+  an actual cause.
+- A third real CRLF corruption from the `Edit` tool, this time on
+  `tests/scheduling/test_engine.py`, caught via `file(1)` (not
+  `grep -c $'\r'`, which gave the same false "0" reading already
+  documented above) and fixed in a follow-up commit.
