@@ -56,6 +56,27 @@ export interface LightCardModel {
   /** The light's configured off-time ("HH:MM"), for the OFF/DAWN timeline
    * marker -- see engine.py's resolve_cfg_end_hour and sensor.py. */
   scheduleEndTime: string | null;
+  // ── Tonight's Schedule (Plan B) -- the light's own configured values,
+  // read-only display this pass, not live-editable from this card (see
+  // sensor.py's extra_state_attributes for where these come from). ──
+  fadeIn: number | null;
+  fadeOut: number | null;
+  warmwhiteTime: string | null;
+  warmwhiteEnabled: boolean;
+  verifyEnabled: boolean;
+  /** Fixed clock-time off-check (distinct from verifyEnabled above, which
+   * checks shortly after any fire) -- this pass only displays the toggle
+   * state and a computed timestamp, no check logic behind it yet. */
+  verifyOffEnabled: boolean;
+  /** Who currently owns this light's manual override, if anyone --
+   * "force_white" | "salute" | "emergency" | null. See coordinator.py's
+   * ManualOverride/_OVERRIDE_SOURCE_* and override_for(). */
+  overrideSource: string | null;
+  /** Plan A's verify-and-retry outcome for the most recent fire, if any
+   * has happened yet since this coordinator started. */
+  verifyResult: string | null;
+  verifyCheckedAt: string | null;
+  verifyAttemptsUsed: number | null;
 }
 
 export interface SkipModel {
@@ -265,6 +286,16 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
       segments: ((scheduleAttrs.segments as RawSegment[] | undefined) ?? []).map(mapSegment),
       sunsetHour: (scheduleAttrs.sunset_hour as number) ?? null,
       scheduleEndTime: (scheduleAttrs.schedule_end_time as string) ?? null,
+      fadeIn: (scheduleAttrs.fade_in as number) ?? null,
+      fadeOut: (scheduleAttrs.fade_out as number) ?? null,
+      warmwhiteTime: (scheduleAttrs.warmwhite_time as string) ?? null,
+      warmwhiteEnabled: (scheduleAttrs.warmwhite_enabled as boolean) ?? false,
+      verifyEnabled: (scheduleAttrs.verify_enabled as boolean) ?? false,
+      verifyOffEnabled: (scheduleAttrs.verify_off_enabled as boolean) ?? false,
+      overrideSource: (scheduleAttrs.override_source as string) ?? null,
+      verifyResult: (scheduleAttrs.verify_result as string) ?? null,
+      verifyCheckedAt: (scheduleAttrs.verify_checked_at as string) ?? null,
+      verifyAttemptsUsed: (scheduleAttrs.verify_attempts_used as number) ?? null,
     });
   }
   lights.sort((a, b) => a.lightName.localeCompare(b.lightName));

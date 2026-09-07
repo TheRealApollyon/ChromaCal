@@ -80,7 +80,7 @@ async def test_verify_disabled_never_schedules_a_check(hass, freezer):
     entry = await _setup_entry(hass, "test_verify_disabled")
     coordinator = entry.runtime_data
 
-    light = replace(coordinator._light_config_for(FRONT_ENTITY), verify_enabled=False)
+    light = replace(coordinator.light_config_for(FRONT_ENTITY), verify_enabled=False)
 
     await coordinator._call_fire_command_verified(FRONT_ENTITY, light, "off", OFF_COMMAND)
 
@@ -94,7 +94,7 @@ async def test_verify_enabled_records_pending_immediately_after_firing(hass, fre
     async_mock_service(hass, "light", "turn_off")
     entry = await _setup_entry(hass, "test_verify_pending")
     coordinator = entry.runtime_data
-    light = coordinator._light_config_for(FRONT_ENTITY)
+    light = coordinator.light_config_for(FRONT_ENTITY)
 
     await coordinator._call_fire_command_verified(FRONT_ENTITY, light, "off", OFF_COMMAND)
 
@@ -109,7 +109,7 @@ async def test_matching_state_records_ok_and_dismisses_notification(hass, freeze
     await hass.config.async_set_time_zone("America/Chicago")
     entry = await _setup_entry(hass, "test_verify_ok")
     coordinator = entry.runtime_data
-    light = coordinator._light_config_for(FRONT_ENTITY)
+    light = coordinator.light_config_for(FRONT_ENTITY)
     hass.states.async_set(FRONT_ENTITY, "off")
 
     with patch(
@@ -129,7 +129,7 @@ async def test_mismatch_with_attempts_left_retries_with_short_transition(hass, f
     turn_off_calls = async_mock_service(hass, "light", "turn_off")
     entry = await _setup_entry(hass, "test_verify_retry")
     coordinator = entry.runtime_data
-    light = coordinator._light_config_for(FRONT_ENTITY)
+    light = coordinator.light_config_for(FRONT_ENTITY)
     hass.states.async_set(FRONT_ENTITY, "on")  # still on -- doesn't match the off command
 
     await coordinator._run_verify_check(FRONT_ENTITY, light, OFF_COMMAND, attempts_left=2)
@@ -149,7 +149,7 @@ async def test_mismatch_with_no_attempts_left_notifies_and_records_failed(hass, 
     async_mock_service(hass, "light", "turn_off")
     entry = await _setup_entry(hass, "test_verify_failed")
     coordinator = entry.runtime_data
-    light = coordinator._light_config_for(FRONT_ENTITY)
+    light = coordinator.light_config_for(FRONT_ENTITY)
     hass.states.async_set(FRONT_ENTITY, "on")
 
     with patch(
@@ -176,8 +176,8 @@ async def test_two_lights_verify_state_never_collides(hass, freezer):
     async_mock_service(hass, "light", "turn_off")
     entry = await _setup_entry(hass, "test_verify_two_lights")
     coordinator = entry.runtime_data
-    front_light = coordinator._light_config_for(FRONT_ENTITY)
-    back_light = coordinator._light_config_for(BACK_ENTITY)
+    front_light = coordinator.light_config_for(FRONT_ENTITY)
+    back_light = coordinator.light_config_for(BACK_ENTITY)
 
     hass.states.async_set(FRONT_ENTITY, "off")  # matches -- will be "ok"
     hass.states.async_set(BACK_ENTITY, "on")  # mismatch -- will stay "pending"
@@ -203,7 +203,7 @@ async def test_a_new_fire_cancels_a_still_pending_verify_chain_for_the_same_ligh
     async_mock_service(hass, "light", "turn_off")
     entry = await _setup_entry(hass, "test_verify_cancel_pending")
     coordinator = entry.runtime_data
-    light = coordinator._light_config_for(FRONT_ENTITY)
+    light = coordinator.light_config_for(FRONT_ENTITY)
 
     with patch("custom_components.chromacal.coordinator.async_call_later") as mock_call_later:
         first_unsub = MagicMock()

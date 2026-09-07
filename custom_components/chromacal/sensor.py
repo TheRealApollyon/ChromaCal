@@ -136,6 +136,28 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             ],
         }
 
+        # Tonight's Schedule (Plan B) -- the light's own configured
+        # values, not just their effect on the resolved schedule above.
+        # warmwhite_time in particular: only its effect (the last segment
+        # capped early) was visible before this; the frontend shouldn't
+        # have to reverse-engineer the boundary from segment math when
+        # the source value is right here on LightConfig.
+        light = self.coordinator.light_config_for(self._light_entity)
+        if light is not None:
+            attrs["fade_in"] = light.fade_in
+            attrs["fade_out"] = light.fade_out
+            attrs["warmwhite_time"] = light.warmwhite_time
+            attrs["warmwhite_enabled"] = light.warmwhite_enabled
+            attrs["verify_enabled"] = light.verify_enabled
+            attrs["verify_off_enabled"] = light.verify_off_enabled
+
+        # Manual override (Salute/Force White/Emergency) -- so Tonight's
+        # Schedule can show when something else currently owns the light,
+        # instead of silently rendering the normal schedule as if it were
+        # still in charge.
+        override = self.coordinator.override_for(self._light_entity)
+        attrs["override_source"] = override.source if override is not None else None
+
         # Verify-and-retry (Plan A) -- real state for a future panel
         # surface to bind to, not a placeholder. None until the first
         # on/off transition after this coordinator started, same as

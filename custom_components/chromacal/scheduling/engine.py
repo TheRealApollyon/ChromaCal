@@ -56,7 +56,13 @@ class ScheduleConfig:
 @dataclass(frozen=True)
 class LightConfig:
     """The subset of a light's config that get_night_segments/
-    get_desired_fire_key/build_fire_command need.
+    get_desired_fire_key/build_fire_command need -- plus, since Plan A,
+    a few fields (verify_*) that only the coordinator's fire-verification
+    path needs, not those three functions. Kept on this same dataclass
+    anyway rather than a second one: it's still the one shape
+    build_light_config() produces from a light's raw config dict, and
+    every caller that needs "this light's resolved config" already reads
+    from here (sensor.py included, for display -- see verify_off_enabled).
 
     warmwhite_kelvin_mireds and warmwhite_color aren't collected by any
     config flow yet (Phase 1's wizard doesn't ask for them) -- they exist
@@ -78,6 +84,10 @@ class LightConfig:
     verify_enabled: bool = True
     verify_retry_count: int = 2
     verify_check_delay: int = 180
+    # Fixed clock-time off-verification (distinct from verify_enabled
+    # above) -- this pass only displays it (Tonight's Schedule), no check
+    # logic reads it yet. See const.py's CONF_VERIFY_OFF_ENABLED.
+    verify_off_enabled: bool = False
 
 
 def get_enabled_holidays(config: ScheduleConfig, year: int) -> list[HolidayEvent]:

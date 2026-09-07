@@ -72,6 +72,46 @@ async def test_sensor_created_for_configured_light(hass):
     assert state.attributes["light_name"] == "Front Porch"
 
 
+async def test_sensor_exposes_light_config_and_override_state(hass):
+    """Tonight's Schedule (Plan B) needs the light's own configured values,
+    not just their effect on the resolved schedule -- and needs to know
+    when a manual override currently owns the light."""
+    hass.states.async_set(
+        "sun.sun",
+        "above_horizon",
+        {"next_setting": "2026-12-25T20:00:00+00:00"},
+    )
+    hass.states.async_set("light.front_porch", "off")
+
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, entry_id="test_config_attrs")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    live_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = next(iter(live_entry.subentries.values()))
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"test_config_attrs_{subentry.subentry_id}_schedule"
+    )
+    state = hass.states.get(entity_id)
+
+    assert state.attributes["fade_in"] == 30
+    assert state.attributes["fade_out"] == 120
+    assert state.attributes["warmwhite_time"] == "22:00"
+    assert state.attributes["warmwhite_enabled"] is True
+    assert state.attributes["verify_enabled"] is True
+    assert state.attributes["verify_off_enabled"] is False  # ENTRY_DATA never set it -- real default
+    assert state.attributes["override_source"] is None  # nothing overriding yet
+
+    coordinator = live_entry.runtime_data
+    await coordinator.async_fire_force_white("light.front_porch")
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.attributes["override_source"] == "force_white"
+
+
 async def test_light_name_attribute_is_the_configured_name_not_the_entity_friendly_name(hass):
     """Regression test for a real bug found live during Phase 10's compact
     card verification: the panel/card used to read the light entity's own

@@ -592,10 +592,16 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         if current is not None and current.source == source:
             self._manual_override.pop(light_entity, None)
 
-    def _light_config_for(self, light_entity: str) -> LightConfig | None:
+    def light_config_for(self, light_entity: str) -> LightConfig | None:
         """Look up and build the LightConfig for one configured light by
         entity id. None if it's no longer configured (defensive; shouldn't
-        happen for a light_entity sourced from self.lights itself)."""
+        happen for a light_entity sourced from self.lights itself).
+
+        Public (no leading underscore) since Tonight's Schedule sensor
+        reads it too now, not just Force White -- same reasoning as
+        verify_state_for/override_for below: a real accessor instead of
+        every caller reaching into a private helper.
+        """
         light_data = next(
             (l for l in self.lights if l.get(CONF_ENTITY) == light_entity), None
         )
@@ -877,6 +883,16 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         panel needs this for an honest "Verify Off" row) instead of the
         private _verify_state dict being reached into directly."""
         return self._verify_state.get(light_entity)
+
+    def override_for(self, light_entity: str) -> ManualOverride | None:
+        """This light's current manual override, if any -- read by
+        sensor.py so Tonight's Schedule can show when Salute/Force White/
+        Emergency currently owns the light, instead of the private
+        _manual_override dict being reached into directly. Deliberately
+        returns the raw entry, not just _is_overridden()'s bool: the
+        panel needs to know *which* source, not just whether one exists.
+        """
+        return self._manual_override.get(light_entity)
 
     async def async_recheck_color_cycle(self, now: datetime) -> None:
         """Re-fire a stable multi-color 'event:X' key when its active color
@@ -1254,7 +1270,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         entity -- matches where the options-flow phase is already headed
         for per-light config.
         """
-        light = self._light_config_for(light_entity)
+        light = self.light_config_for(light_entity)
         if light is None:
             return
 
@@ -1264,6 +1280,13 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             source=_OVERRIDE_SOURCE_FORCE_WHITE,
             expires_at=dt_util.now() + timedelta(minutes=FORCE_WHITE_OVERRIDE_MINUTES),
         )
+        # Without this, override_for() has a real value the instant this
+        # returns, but the schedule sensor (Tonight's Schedule, Plan B)
+        # never re-publishes it until the next natural refresh -- up to a
+        # full 5 minutes stale. Salute/Emergency already do this at their
+        # own start/stop transitions; Force White never got the same
+        # treatment because nothing read its override state until now.
+        self.async_update_listeners()
         await self._call_fire_command_verified(light_entity, light, "force_white", command)
 
         async def _resume(_now: datetime) -> None:
@@ -1273,6 +1296,7 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
             # multi-source cancel/Stop plan discussion for the bug this
             # closes.
             self._clear_override_if_owned(light_entity, _OVERRIDE_SOURCE_FORCE_WHITE)
+            self.async_update_listeners()  # same reasoning as the start transition above
             await self.async_force_fire([light_entity])
 
         async_call_later(

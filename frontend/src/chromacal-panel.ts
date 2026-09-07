@@ -10,13 +10,43 @@ import {
   type UpcomingEventModel,
 } from "./grouping";
 import { nativeThemeVars, presetThemeVars, PRESET_IDS, PRESET_LABELS, type PresetId } from "./theme";
-import { buildTimelineMarks, segmentPosition } from "./timeline";
+import {
+  addMinutesToHHMM,
+  buildTimelineMarks,
+  formatCountdown,
+  formatHour,
+  hhmmToWindowMinutes,
+  hourToWindowMinutes,
+  segmentPosition,
+} from "./timeline";
 
 const THEME_STORAGE_KEY = "chromacal-panel-theme-preset";
 
 /** Multi-color cycling events get the same "spinning" glow pulse v1 used
  * for its color orb -- ported at the same threshold v1 hardcoded. */
 const SPINNING_COLOR_THRESHOLD = 5;
+
+/** Tonight's Schedule (Plan B) -- one row in the phase-by-phase list.
+ * "point" is a single moment (done/upcoming only, no "active" state --
+ * matches v1's schedRow() for non-range markers); "segment" is a real
+ * night-segment with a start/end range, so it can be currently active,
+ * not just done/upcoming; "detail" is a plain label/value row with no
+ * done/active concept at all (Color Fade-In, Dim Out, Verify Off --
+ * config values, not schedule events). Read-only display this pass, no
+ * inline editing -- see coordinator.py's LightConfig for where these
+ * values actually come from. */
+type ScheduleRow =
+  | { kind: "point"; label: string; time: string; done: boolean }
+  | { kind: "segment"; label: string; time: string; done: boolean; active: boolean; color: string | null }
+  | { kind: "detail"; label: string; value: string };
+
+/** coordinator.py's ManualOverride source tags -- see
+ * _OVERRIDE_SOURCE_FORCE_WHITE/_SALUTE/_EMERGENCY. */
+const OVERRIDE_LABELS: Record<string, string> = {
+  force_white: "Force White",
+  salute: "21 Gun Salute",
+  emergency: "Emergency Mode",
+};
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = hex.replace("#", "");
@@ -499,7 +529,8 @@ export class ChromaCalPanel extends LitElement {
       `;
     }
 
-    const marks = buildTimelineMarks(light, new Date().getHours() + new Date().getMinutes() / 60);
+    const nowHour = new Date().getHours() + new Date().getMinutes() / 60;
+    const marks = buildTimelineMarks(light, nowHour);
 
     return html`
       <div class="light-card">
@@ -553,8 +584,101 @@ export class ChromaCalPanel extends LitElement {
               </div>
             </div>`
           : nothing}
+        ${this._renderScheduleList(light, nowHour)}
       </div>
     `;
+  }
+
+  private _renderScheduleList(light: LightCardModel, nowHour: number) {
+    const nowWindowMin = hourToWindowMinutes(nowHour);
+    const point = (label: string, time: string): ScheduleRow => ({
+      kind: "point",
+      label,
+      time,
+      done: nowWindowMin >= hhmmToWindowMinutes(time),
+    });
+
+    const rows: ScheduleRow[] = [];
+
+    if (light.sunsetHour !== null) {
+      rows.push(point("Lights On", formatHour(light.sunsetHour)));
+    }
+    const firstSegment = light.segments[0];
+    if (firstSegment) {
+      rows.push(point("ChromaCal Colors Fire", firstSegment.startTime));
+    }
+    if (light.fadeIn !== null) {
+      rows.push({ kind: "detail", label: "Color Fade-In", value: `${light.fadeIn}s` });
+    }
+    for (const segment of light.segments) {
+      const startWin = hhmmToWindowMinutes(segment.startTime);
+      const endWin = hhmmToWindowMinutes(segment.endTime);
+      rows.push({
+        kind: "segment",
+        label: segment.name,
+        time: `${segment.startTime}–${segment.endTime}`,
+        done: nowWindowMin >= endWin,
+        active: nowWindowMin >= startWin && nowWindowMin < endWin,
+        color: segment.colors[0] ?? null,
+      });
+    }
+    if (light.warmwhiteEnabled && light.warmwhiteTime !== null) {
+      rows.push(point("Warm White", light.warmwhiteTime));
+    }
+    if (light.fadeOut !== null) {
+      rows.push({ kind: "detail", label: "Dim Out", value: `${light.fadeOut}s` });
+    }
+    if (light.scheduleEndTime !== null) {
+      rows.push(point("Lights Off", light.scheduleEndTime));
+    }
+    rows.push({
+      kind: "detail",
+      label: "Verify Off",
+      value:
+        light.verifyOffEnabled && light.scheduleEndTime !== null
+          ? `Enabled — checks ${addMinutesToHHMM(light.scheduleEndTime, 30)}`
+          : "Disabled",
+    });
+
+    const untilWarm = light.warmwhiteEnabled ? formatCountdown(nowHour, light.warmwhiteTime) : null;
+    const untilOff = formatCountdown(nowHour, light.scheduleEndTime);
+
+    return html`
+      <div class="schedule-list">
+        ${light.overrideSource
+          ? html`<div class="schedule-override-banner">
+              ${OVERRIDE_LABELS[light.overrideSource] ?? light.overrideSource} active — overriding
+              the schedule below
+            </div>`
+          : nothing}
+        ${untilWarm || untilOff
+          ? html`<div class="schedule-countdowns">
+              ${untilWarm ? html`<span>${untilWarm} until warm white</span>` : nothing}
+              ${untilOff ? html`<span>${untilOff} until lights off</span>` : nothing}
+            </div>`
+          : nothing}
+        ${rows.map((row) => this._renderScheduleRow(row))}
+      </div>
+    `;
+  }
+
+  private _renderScheduleRow(row: ScheduleRow) {
+    if (row.kind === "detail") {
+      return html`<div class="sched-row sched-row-detail">
+        <span class="sched-row-label">${row.label}</span>
+        <span class="sched-row-value">${row.value}</span>
+      </div>`;
+    }
+    const active = row.kind === "segment" && row.active;
+    const icon = row.done ? "✓" : active ? "▶" : "○";
+    return html`<div class="sched-row ${active ? "active" : ""}">
+      <span class="sched-row-icon">${icon}</span>
+      ${row.kind === "segment" && row.color
+        ? html`<span class="sched-row-swatch" style="background:${row.color}"></span>`
+        : nothing}
+      <span class="sched-row-label">${row.label}</span>
+      <span class="sched-row-time">${row.time}</span>
+    </div>`;
   }
 
   static styles = [
@@ -927,6 +1051,89 @@ export class ChromaCalPanel extends LitElement {
         color: var(--cc-text);
         font-weight: 700;
         font-size: 11px;
+      }
+
+      /* ── Tonight's Schedule (Plan B) -- countdown lines + phase list,
+         below the timeline bar above. ── */
+      .schedule-list {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--cc-border);
+      }
+
+      .schedule-override-banner {
+        background: color-mix(in srgb, var(--cc-red) 15%, transparent);
+        border: 1px solid var(--cc-red);
+        color: var(--cc-red);
+        border-radius: var(--cc-radius);
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+
+      .schedule-countdowns {
+        display: flex;
+        gap: 16px;
+        color: var(--cc-muted);
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+
+      .sched-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        font-size: 13px;
+      }
+
+      .sched-row.active {
+        color: var(--cc-accent);
+        font-weight: 600;
+      }
+
+      .sched-row-icon {
+        width: 16px;
+        flex-shrink: 0;
+        text-align: center;
+        color: var(--cc-muted);
+      }
+
+      .sched-row.active .sched-row-icon {
+        color: var(--cc-accent);
+      }
+
+      .sched-row-swatch {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .sched-row-label {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .sched-row-time {
+        color: var(--cc-muted);
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+
+      .sched-row.active .sched-row-time {
+        color: inherit;
+      }
+
+      .sched-row-detail .sched-row-label {
+        color: var(--cc-muted);
+      }
+
+      .sched-row-value {
+        color: var(--cc-text);
+        font-size: 12px;
+        flex-shrink: 0;
       }
 
       .upcoming-section {

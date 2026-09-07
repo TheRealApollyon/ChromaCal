@@ -20,6 +20,7 @@ from custom_components.chromacal.const import (
     CONF_START_TYPE,
     CONF_VERIFY_CHECK_DELAY,
     CONF_VERIFY_ENABLED,
+    CONF_VERIFY_OFF_ENABLED,
     CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
     DOMAIN,
@@ -147,6 +148,7 @@ async def test_edit_light_updates_its_subentry_data(hass, freezer):
     assert subentry.data[CONF_VERIFY_ENABLED] is True
     assert subentry.data[CONF_VERIFY_RETRY_COUNT] == 2
     assert subentry.data[CONF_VERIFY_CHECK_DELAY] == 180
+    assert subentry.data[CONF_VERIFY_OFF_ENABLED] is False
     assert subentry.title == "Front Porch Renamed"
     # Editing does NOT create a second subentry -- same subentry_id.
     assert len(live_entry.subentries) == 1
@@ -177,6 +179,7 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
             CONF_VERIFY_ENABLED: False,
             CONF_VERIFY_RETRY_COUNT: "3",
             CONF_VERIFY_CHECK_DELAY: "60",
+            CONF_VERIFY_OFF_ENABLED: True,
         },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -189,6 +192,7 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
     assert back_yard.data[CONF_VERIFY_ENABLED] is False
     assert back_yard.data[CONF_VERIFY_RETRY_COUNT] == 3
     assert back_yard.data[CONF_VERIFY_CHECK_DELAY] == 60
+    assert back_yard.data[CONF_VERIFY_OFF_ENABLED] is True
 
 
 async def test_removing_a_light_stops_it_being_scheduled_without_a_reload(hass, freezer):

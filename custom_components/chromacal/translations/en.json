@@ -29,7 +29,11 @@
           "fade_in": "Fade in (seconds)",
           "fade_out": "Fade out (seconds)",
           "warmwhite_time": "Warm white cutoff time",
-          "warmwhite_enabled": "Enable warm white cutoff"
+          "warmwhite_enabled": "Enable warm white cutoff",
+          "verify_enabled": "Verify on/off after firing",
+          "verify_retry_count": "Retry attempts",
+          "verify_check_delay": "Initial check delay (seconds)",
+          "verify_off_enabled": "Verify lights are off 30 min after off-time"
         }
       },
       "reconfigure_region": {
@@ -77,7 +81,8 @@
             "warmwhite_enabled": "Enable warm white cutoff",
             "verify_enabled": "Verify on/off after firing",
             "verify_retry_count": "Retry attempts",
-            "verify_check_delay": "Initial check delay (seconds)"
+            "verify_check_delay": "Initial check delay (seconds)",
+            "verify_off_enabled": "Verify lights are off 30 min after off-time"
           }
         },
         "reconfigure": {
@@ -97,7 +102,8 @@
             "warmwhite_enabled": "Enable warm white cutoff",
             "verify_enabled": "Verify on/off after firing",
             "verify_retry_count": "Retry attempts",
-            "verify_check_delay": "Initial check delay (seconds)"
+            "verify_check_delay": "Initial check delay (seconds)",
+            "verify_off_enabled": "Verify lights are off 30 min after off-time"
           }
         }
       },

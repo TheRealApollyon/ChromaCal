@@ -18,11 +18,15 @@ function toWindowMinutes(rawMinutes: number): number {
   return rawMinutes >= WINDOW_START_MIN ? rawMinutes : rawMinutes + 24 * 60;
 }
 
-function hourToWindowMinutes(hour: number): number {
+/** Exported alongside hhmmToWindowMinutes below so callers outside this
+ * module (Tonight's Schedule's phase-list done/active comparisons) use
+ * the same midnight-wrapping semantics as the timeline marks themselves,
+ * instead of a second, potentially-inconsistent HH:MM comparison. */
+export function hourToWindowMinutes(hour: number): number {
   return toWindowMinutes(Math.round(hour * 60));
 }
 
-function hhmmToWindowMinutes(hhmm: string): number {
+export function hhmmToWindowMinutes(hhmm: string): number {
   return toWindowMinutes(hhmmToMinutes(hhmm));
 }
 
@@ -39,10 +43,34 @@ export function segmentPosition(startTime: string, endTime: string): { leftPct: 
   return { leftPct, widthPct: Math.max(0, rightPct - leftPct) };
 }
 
-function formatHour(hour: number): string {
+export function formatHour(hour: number): string {
   const totalMinutes = Math.round(hour * 60) % (24 * 60);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** "Xh Xm until 22:00"-style countdown, for Tonight's Schedule's two
+ * countdown lines above the phase list. null if there's no target (the
+ * relevant toggle is off) or it's already passed for tonight -- callers
+ * render nothing in either case, not a stale/negative countdown. */
+export function formatCountdown(nowHour: number, targetHHMM: string | null): string | null {
+  if (targetHHMM === null) return null;
+  const diffMin = hhmmToWindowMinutes(targetHHMM) - hourToWindowMinutes(nowHour);
+  if (diffMin <= 0) return null;
+  const h = Math.floor(diffMin / 60);
+  const m = diffMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** A "HH:MM" time plus some minutes, wrapping past midnight -- e.g.
+ * Verify Off's fixed off-time + 30 minutes. Pure clock math, not
+ * night-window-relative like the timeline helpers above (those compare
+ * two points; this computes a new one from a single starting point). */
+export function addMinutesToHHMM(hhmm: string, minutes: number): string {
+  const wrapped = (((hhmmToMinutes(hhmm) + minutes) % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 

@@ -68,6 +68,17 @@ CONF_VERIFY_ENABLED = "verify_enabled"
 CONF_VERIFY_RETRY_COUNT = "verify_retry_count"
 CONF_VERIFY_CHECK_DELAY = "verify_check_delay"
 
+# Verify Off: a fixed clock-time check at configured off-time + 30 minutes,
+# distinct from CONF_VERIFY_ENABLED above (which checks shortly after any
+# fire command, not on a fixed schedule) -- ported from v1's
+# verifyOffEnabled toggle. Default False matches v1's own real behavior:
+# `verifyOffOn = !!(light?.verifyOffEnabled)`, no `?? true` fallback, so an
+# unset light was off by default there too, not on. This pass only exposes
+# the toggle's state and the computed timestamp (Tonight's Schedule, pure
+# frontend math off schedule_end_time) -- the actual check-and-notify
+# mechanism is deliberately out of scope, a separate later pass.
+CONF_VERIFY_OFF_ENABLED = "verify_off_enabled"
+
 # ── Regions — matches the 8 wizard region tiles in chromacal.html ──
 REGIONS = {
     "us": "United States",
