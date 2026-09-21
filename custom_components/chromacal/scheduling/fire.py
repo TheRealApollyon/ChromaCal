@@ -70,6 +70,25 @@ def build_fire_command(
             {**color_data, "brightness": 255, "transition": max(fade_in, 30)},
         )
 
+    if key == "sunset_fade":
+        # Same color/kelvin resolution as 'warmwhite' -- a single turn_on
+        # with a long transition is the whole "ramp", the same way
+        # fade_out's transition:120 already does a gradual dim-out
+        # elsewhere in this module. No new recheck-loop machinery needed
+        # (see this module's own docstring on why color-cycling DID need
+        # one and a plain transition never does).
+        if light.warmwhite_color:
+            r, g, b = _hex_to_rgb(light.warmwhite_color)
+            color_data = {"rgb_color": [r, g, b]}
+        else:
+            kelvin = round(1_000_000 / (light.warmwhite_kelvin_mireds or 250))
+            color_data = {"color_temp_kelvin": kelvin}
+        return FireCommand(
+            "light",
+            "turn_on",
+            {**color_data, "brightness": 255, "transition": light.sunset_fade_duration_sec},
+        )
+
     if key.startswith("event:"):
         event_name = key[len("event:") :]
         segment = next((s for s in segments if s.event.name == event_name), None)

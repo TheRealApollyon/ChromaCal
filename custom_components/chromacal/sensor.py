@@ -150,6 +150,14 @@ class ChromaCalScheduleSensor(CoordinatorEntity[ChromaCalCoordinator], SensorEnt
             attrs["warmwhite_enabled"] = light.warmwhite_enabled
             attrs["verify_enabled"] = light.verify_enabled
             attrs["verify_off_enabled"] = light.verify_off_enabled
+            # Needed for Tonight's Schedule's "HA Fade-In Starts" row --
+            # sunset_fade_duration_sec is deliberately NOT exposed here,
+            # nothing displays it. verify_off_notify_service must NEVER be
+            # added here either -- it's a phone-specific string, config-
+            # entry-local only, not something that belongs in an entity
+            # attribute (logged/recorded/possibly synced elsewhere).
+            attrs["sunset_fade_enabled"] = light.sunset_fade_enabled
+            attrs["sunset_fade_offset_min"] = light.sunset_fade_offset_min
 
         # Manual override (Salute/Force White/Emergency) -- so Tonight's
         # Schedule can show when something else currently owns the light,

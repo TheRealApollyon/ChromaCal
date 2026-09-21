@@ -603,6 +603,15 @@ export class ChromaCalPanel extends LitElement {
     if (light.sunsetHour !== null) {
       rows.push(point("Lights On", formatHour(light.sunsetHour)));
     }
+    // Row order matches v1's real chromacal.html (3786-3824): "HA Fade-In
+    // Starts" renders AFTER "Lights On" even though its own instant is
+    // chronologically earlier (sunset minus the offset) -- a faithfully-
+    // ported quirk, not a bug. Gated on sunsetFadeEnabled, not v1's
+    // startOffset -- this is the new, opt-in replacement for the old
+    // external automation, not a display-only port of v1's fadeInBefore.
+    if (light.sunsetFadeEnabled && light.sunsetHour !== null && light.sunsetFadeOffsetMin !== null) {
+      rows.push(point("HA Fade-In Starts", formatHour(light.sunsetHour - light.sunsetFadeOffsetMin / 60)));
+    }
     const firstSegment = light.segments[0];
     if (firstSegment) {
       rows.push(point("ChromaCal Colors Fire", firstSegment.startTime));

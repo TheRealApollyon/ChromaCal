@@ -57,6 +57,20 @@ CONF_FADE_OUT = "fade_out"
 CONF_WARMWHITE_TIME = "warmwhite_time"
 CONF_WARMWHITE_ENABLED = "warmwhite_enabled"
 
+# Sunset-synced fade-in: ChromaCal itself fires a warm-white ramp starting
+# this many minutes before sunset, replacing the job Shane's standalone
+# external "Sunset Fade In" HA automation used to do -- see engine.py's
+# get_desired_fire_key docstring for why this widens (and replaces) the
+# existing 'warmup' no-op window instead of adding a second key alongside
+# it. Deliberately opt-in per light (default False): running both this AND
+# the old external automation on the same light would recreate the exact
+# two-controllers-racing-one-light pattern from CLAUDE.md's light flip-back
+# investigation -- Shane disables/removes the old automation for any light
+# that turns this on.
+CONF_SUNSET_FADE_ENABLED = "sunset_fade_enabled"
+CONF_SUNSET_FADE_OFFSET_MIN = "sunset_fade_offset_min"
+CONF_SUNSET_FADE_DURATION_SEC = "sunset_fade_duration_sec"
+
 # Verify-and-retry (Plan A): after firing a real on/off transition, confirm
 # the light actually reports the intended state instead of just trusting
 # the service call landed -- see coordinator.py's _call_fire_command_verified
@@ -110,6 +124,15 @@ END_TYPES = ["time", "sunrise", "civil_dawn", "never"]
 # Matches the <select> options in the v1 wizard's Step 5 (fade in/out dropdowns)
 FADE_IN_OPTIONS = [0, 15, 30, 60, 120]
 FADE_OUT_OPTIONS = [0, 30, 60, 120]
+
+# Sunset-synced fade-in dropdowns -- fixed presets, same convention as
+# every other per-light numeric field above, not a free-entry number box.
+# 45 minutes/2700s is the default duration specifically because it matches
+# the old "Sunset Fade In" automation's own real timing (sunset-30min ->
+# full bright), so a light switching over to this feature keeps the same
+# real-world ramp it already had.
+SUNSET_FADE_OFFSET_OPTIONS = [0, 15, 30, 45, 60]
+SUNSET_FADE_DURATION_OPTIONS = [900, 1800, 2700, 3600]
 
 # Verify-and-retry dropdowns -- 0 retries is a valid choice (check once,
 # notify immediately on mismatch, no re-fire).
@@ -172,3 +195,5 @@ DEFAULT_FADE_OUT = 120
 DEFAULT_WARMWHITE_TIME = "22:00"
 DEFAULT_VERIFY_RETRY_COUNT = 2
 DEFAULT_VERIFY_CHECK_DELAY = 180
+DEFAULT_SUNSET_FADE_OFFSET_MIN = 30
+DEFAULT_SUNSET_FADE_DURATION_SEC = 2700

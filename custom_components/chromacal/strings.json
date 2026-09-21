@@ -28,8 +28,15 @@
           "end_time": "End time (if \"time\" selected above)",
           "fade_in": "Fade in (seconds)",
           "fade_out": "Fade out (seconds)",
+          "sunset_fade_enabled": "Enable sunset-synced fade-in (replaces an external automation)",
+          "sunset_fade_offset_min": "Fade-in starts this many minutes before sunset",
+          "sunset_fade_duration_sec": "Fade-in duration (seconds)",
           "warmwhite_time": "Warm white cutoff time",
-          "warmwhite_enabled": "Enable warm white cutoff"
+          "warmwhite_enabled": "Enable warm white cutoff",
+          "verify_enabled": "Verify on/off after firing",
+          "verify_retry_count": "Retry attempts",
+          "verify_check_delay": "Initial check delay (seconds)",
+          "verify_off_enabled": "Verify lights are off 30 min after off-time"
         }
       },
       "reconfigure_region": {
@@ -73,6 +80,9 @@
             "end_time": "End time (if \"time\" selected above)",
             "fade_in": "Fade in (seconds)",
             "fade_out": "Fade out (seconds)",
+            "sunset_fade_enabled": "Enable sunset-synced fade-in (replaces an external automation)",
+            "sunset_fade_offset_min": "Fade-in starts this many minutes before sunset",
+            "sunset_fade_duration_sec": "Fade-in duration (seconds)",
             "warmwhite_time": "Warm white cutoff time",
             "warmwhite_enabled": "Enable warm white cutoff",
             "verify_enabled": "Verify on/off after firing",
@@ -94,6 +104,9 @@
             "end_time": "End time (if \"time\" selected above)",
             "fade_in": "Fade in (seconds)",
             "fade_out": "Fade out (seconds)",
+            "sunset_fade_enabled": "Enable sunset-synced fade-in (replaces an external automation)",
+            "sunset_fade_offset_min": "Fade-in starts this many minutes before sunset",
+            "sunset_fade_duration_sec": "Fade-in duration (seconds)",
             "warmwhite_time": "Warm white cutoff time",
             "warmwhite_enabled": "Enable warm white cutoff",
             "verify_enabled": "Verify on/off after firing",

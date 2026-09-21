@@ -41,6 +41,28 @@ def test_warmwhite_transition_is_at_least_30_even_if_fade_in_is_shorter():
     assert cmd.service_data["transition"] == 30
 
 
+def test_sunset_fade_key_uses_kelvin_default_when_no_color_or_kelvin_configured():
+    light = LightConfig(name="Porch", sunset_fade_duration_sec=2700)
+    cmd = build_fire_command("sunset_fade", light, [], NOW)
+    assert cmd.service == "turn_on"
+    assert cmd.service_data["color_temp_kelvin"] == 4000
+    assert cmd.service_data["brightness"] == 255
+    assert cmd.service_data["transition"] == 2700
+
+
+def test_sunset_fade_key_prefers_explicit_color_over_kelvin():
+    light = LightConfig(name="Porch", warmwhite_color="#FF0000", sunset_fade_duration_sec=1800)
+    cmd = build_fire_command("sunset_fade", light, [], NOW)
+    assert cmd.service_data["rgb_color"] == [255, 0, 0]
+    assert "color_temp_kelvin" not in cmd.service_data
+
+
+def test_sunset_fade_transition_uses_the_configured_duration_not_fade_in():
+    light = LightConfig(name="Porch", fade_in=15, sunset_fade_duration_sec=900)
+    cmd = build_fire_command("sunset_fade", light, [], NOW)
+    assert cmd.service_data["transition"] == 900  # not fade_in's 15, and not warmwhite's max(fade_in, 30)
+
+
 def test_event_key_single_color_no_cycling():
     segment = NightSegment(
         SegmentEvent("Halloween", ("#FF5000",), "holiday", "🎃"), 18.0, 22.0

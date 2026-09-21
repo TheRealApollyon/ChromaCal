@@ -49,6 +49,9 @@ from .const import (
     CONF_REGION,
     CONF_START_TIME,
     CONF_START_TYPE,
+    CONF_SUNSET_FADE_DURATION_SEC,
+    CONF_SUNSET_FADE_ENABLED,
+    CONF_SUNSET_FADE_OFFSET_MIN,
     CONF_VERIFY_CHECK_DELAY,
     CONF_VERIFY_ENABLED,
     CONF_VERIFY_OFF_ENABLED,
@@ -60,6 +63,8 @@ from .const import (
     DEFAULT_FADE_IN,
     DEFAULT_FADE_OUT,
     DEFAULT_START_TIME,
+    DEFAULT_SUNSET_FADE_DURATION_SEC,
+    DEFAULT_SUNSET_FADE_OFFSET_MIN,
     DEFAULT_VERIFY_CHECK_DELAY,
     DEFAULT_VERIFY_RETRY_COUNT,
     DEFAULT_WARMWHITE_TIME,
@@ -70,6 +75,8 @@ from .const import (
     LIGHT_SUBENTRY_TYPE,
     REGIONS,
     START_TYPES,
+    SUNSET_FADE_DURATION_OPTIONS,
+    SUNSET_FADE_OFFSET_OPTIONS,
     VERIFY_CHECK_DELAY_OPTIONS,
     VERIFY_RETRY_COUNT_OPTIONS,
 )
@@ -160,6 +167,29 @@ def _light_schema(light: dict[str, Any] | None = None) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Required(
+                CONF_SUNSET_FADE_ENABLED, default=light.get(CONF_SUNSET_FADE_ENABLED, False)
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_SUNSET_FADE_OFFSET_MIN,
+                default=str(light.get(CONF_SUNSET_FADE_OFFSET_MIN, DEFAULT_SUNSET_FADE_OFFSET_MIN)),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[str(v) for v in SUNSET_FADE_OFFSET_OPTIONS],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                CONF_SUNSET_FADE_DURATION_SEC,
+                default=str(
+                    light.get(CONF_SUNSET_FADE_DURATION_SEC, DEFAULT_SUNSET_FADE_DURATION_SEC)
+                ),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[str(v) for v in SUNSET_FADE_DURATION_OPTIONS],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Optional(
                 CONF_WARMWHITE_TIME, default=light.get(CONF_WARMWHITE_TIME, DEFAULT_WARMWHITE_TIME)
             ): selector.TimeSelector(),
@@ -207,6 +237,9 @@ def _light_dict_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_END_TIME: user_input.get(CONF_END_TIME, DEFAULT_END_TIME),
         CONF_FADE_IN: int(user_input[CONF_FADE_IN]),
         CONF_FADE_OUT: int(user_input[CONF_FADE_OUT]),
+        CONF_SUNSET_FADE_ENABLED: user_input[CONF_SUNSET_FADE_ENABLED],
+        CONF_SUNSET_FADE_OFFSET_MIN: int(user_input[CONF_SUNSET_FADE_OFFSET_MIN]),
+        CONF_SUNSET_FADE_DURATION_SEC: int(user_input[CONF_SUNSET_FADE_DURATION_SEC]),
         CONF_WARMWHITE_TIME: user_input.get(CONF_WARMWHITE_TIME, DEFAULT_WARMWHITE_TIME),
         CONF_WARMWHITE_ENABLED: user_input[CONF_WARMWHITE_ENABLED],
         CONF_VERIFY_ENABLED: user_input[CONF_VERIFY_ENABLED],

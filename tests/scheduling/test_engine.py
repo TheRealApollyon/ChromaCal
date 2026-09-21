@@ -303,6 +303,60 @@ def test_desired_key_warmup_between_sunset_and_color_start():
     assert get_desired_fire_key(now, light, segments, 18.0) == "warmup"
 
 
+# ── sunset_fade_enabled -- the real replacement for the external "Sunset
+# Fade In" automation, not just v1's display-only fadeInBefore ──────────
+
+
+def test_desired_key_sunset_fade_fires_before_sunset_when_enabled():
+    # sunset_fade_enabled widens (and replaces) the old 'warmup' window to
+    # start BEFORE sunset itself (sunset - offset), not just at sunset --
+    # this instant would be 'pre' with the feature off.
+    light = LightConfig(
+        name="Porch", end_type="time", end_time="23:00", start_offset=30,
+        sunset_fade_enabled=True, sunset_fade_offset_min=30,
+    )
+    now = datetime(2026, 7, 23, 17, 45)  # 15 min before sunset, past the 17:30 fade start
+    segments = get_night_segments(now, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, light, segments, 18.0) == "sunset_fade"
+
+
+def test_desired_key_still_pre_before_the_sunset_fade_start():
+    light = LightConfig(
+        name="Porch", end_type="time", end_time="23:00", start_offset=30,
+        sunset_fade_enabled=True, sunset_fade_offset_min=30,
+    )
+    now = datetime(2026, 7, 23, 17, 20)  # before the 17:30 fade start
+    segments = get_night_segments(now, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, light, segments, 18.0) == "pre"
+
+
+def test_desired_key_sunset_fade_covers_the_old_warmup_window_too():
+    # Same now/config as test_desired_key_warmup_between_sunset_and_color_start
+    # above, but with sunset_fade_enabled -- the entire former 'warmup'
+    # span becomes 'sunset_fade', not a second key alongside it.
+    light = LightConfig(
+        name="Porch", end_type="time", end_time="23:00", start_offset=30,
+        sunset_fade_enabled=True, sunset_fade_offset_min=30,
+    )
+    now = datetime(2026, 7, 23, 18, 10)
+    segments = get_night_segments(now, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(now, light, segments, 18.0) == "sunset_fade"
+
+
+def test_desired_key_sunset_fade_offset_zero_matches_old_warmup_threshold():
+    light = LightConfig(
+        name="Porch", end_type="time", end_time="23:00", start_offset=30,
+        sunset_fade_enabled=True, sunset_fade_offset_min=0,
+    )
+    just_before = datetime(2026, 7, 23, 17, 59)
+    segments_before = get_night_segments(just_before, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(just_before, light, segments_before, 18.0) == "pre"
+
+    just_after = datetime(2026, 7, 23, 18, 1)
+    segments_after = get_night_segments(just_after, light, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)
+    assert get_desired_fire_key(just_after, light, segments_after, 18.0) == "sunset_fade"
+
+
 def test_desired_key_pre_before_sunset():
     now = datetime(2026, 7, 23, 12, 0)
     segments = get_night_segments(now, FIRE_LIGHT, ScheduleConfig(), [FIRE_EVENT], sunset_hour=18.0)

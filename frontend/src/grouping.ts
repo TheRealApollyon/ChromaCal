@@ -68,6 +68,12 @@ export interface LightCardModel {
    * checks shortly after any fire) -- this pass only displays the toggle
    * state and a computed timestamp, no check logic behind it yet. */
   verifyOffEnabled: boolean;
+  /** Sunset-synced fade-in -- see engine.py's get_desired_fire_key for
+   * why this replaces (not supplements) an external "Sunset Fade In"
+   * automation. sunsetFadeOffsetMin is how many minutes BEFORE
+   * sunsetHour the fade-in starts, driving the "HA Fade-In Starts" row. */
+  sunsetFadeEnabled: boolean;
+  sunsetFadeOffsetMin: number | null;
   /** Who currently owns this light's manual override, if anyone --
    * "force_white" | "salute" | "emergency" | null. See coordinator.py's
    * ManualOverride/_OVERRIDE_SOURCE_* and override_for(). */
@@ -292,6 +298,8 @@ export function buildViewModel(hass: HomeAssistant): PanelViewModel {
       warmwhiteEnabled: (scheduleAttrs.warmwhite_enabled as boolean) ?? false,
       verifyEnabled: (scheduleAttrs.verify_enabled as boolean) ?? false,
       verifyOffEnabled: (scheduleAttrs.verify_off_enabled as boolean) ?? false,
+      sunsetFadeEnabled: (scheduleAttrs.sunset_fade_enabled as boolean) ?? false,
+      sunsetFadeOffsetMin: (scheduleAttrs.sunset_fade_offset_min as number) ?? null,
       overrideSource: (scheduleAttrs.override_source as string) ?? null,
       verifyResult: (scheduleAttrs.verify_result as string) ?? null,
       verifyCheckedAt: (scheduleAttrs.verify_checked_at as string) ?? null,

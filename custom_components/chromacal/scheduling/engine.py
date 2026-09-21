@@ -88,6 +88,12 @@ class LightConfig:
     # above) -- this pass only displays it (Tonight's Schedule), no check
     # logic reads it yet. See const.py's CONF_VERIFY_OFF_ENABLED.
     verify_off_enabled: bool = False
+    # Sunset-synced fade-in -- see const.py's CONF_SUNSET_FADE_ENABLED for
+    # why this exists and defaults off. get_desired_fire_key() below is
+    # the only reader of these three.
+    sunset_fade_enabled: bool = False
+    sunset_fade_offset_min: int = 30
+    sunset_fade_duration_sec: int = 2700
 
 
 def get_enabled_holidays(config: ScheduleConfig, year: int) -> list[HolidayEvent]:
@@ -418,9 +424,21 @@ def get_desired_fire_key(
     """What SHOULD be happening right now for this light?
 
     Ports getDesiredFireKey() from chromacal.html. Returns one of:
-    'off' | 'warmwhite' | f'event:{name}' | 'default' | 'warmup' | 'pre'.
-    'warmup' and 'pre' mean "do nothing" -- an existing sunset/sunrise
-    automation is assumed to handle that phase, matching v1.
+    'off' | 'warmwhite' | f'event:{name}' | 'default' | 'warmup' | 'pre' |
+    'sunset_fade'. 'warmup' and 'pre' mean "do nothing" -- an existing
+    sunset/sunrise automation is assumed to handle that phase, matching v1.
+
+    'sunset_fade' is the one key here NOT ported from v1 -- v1 only ever
+    displayed informational timing about an assumed *external* automation
+    (chromacal.html's fadeInBefore/"HA Fade-In Starts"), it never fired
+    anything for that phase itself. This is the real, opt-in replacement:
+    when light.sunset_fade_enabled, the window from
+    (sunset - sunset_fade_offset_min) through color_start_h -- which is
+    WIDER than the old 'warmup' window, since 'warmup' only ever started
+    AT sunset -- becomes this one real key instead of 'warmup', for that
+    light's entire pre-colors phase. The disabled branch below is left
+    byte-for-byte identical to the original two lines so a light that
+    never opts in fires exactly as it always has.
 
     Deliberately uses its own fallback (20.0) when sunset_hour is None,
     NOT get_night_segments' fallback (the current hour) -- that mismatch
@@ -444,6 +462,13 @@ def get_desired_fire_key(
     if now_hour >= color_start_h:
         current = get_current_segment(segments, now_hour)
         return f"event:{current.event.name}" if current else "default"
+
+    if light.sunset_fade_enabled:
+        fade_start_h = approx_sunset_h - light.sunset_fade_offset_min / 60
+        if now_hour >= fade_start_h:
+            return "sunset_fade"
+        return "pre"
+
     if now_hour >= approx_sunset_h:
         return "warmup"
     return "pre"
