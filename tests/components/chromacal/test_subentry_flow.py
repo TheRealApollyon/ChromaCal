@@ -21,6 +21,7 @@ from custom_components.chromacal.const import (
     CONF_VERIFY_CHECK_DELAY,
     CONF_VERIFY_ENABLED,
     CONF_VERIFY_OFF_ENABLED,
+    CONF_VERIFY_OFF_NOTIFY_SERVICE,
     CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
     DOMAIN,
@@ -149,6 +150,10 @@ async def test_edit_light_updates_its_subentry_data(hass, freezer):
     assert subentry.data[CONF_VERIFY_RETRY_COUNT] == 2
     assert subentry.data[CONF_VERIFY_CHECK_DELAY] == 180
     assert subentry.data[CONF_VERIFY_OFF_ENABLED] is False
+    # Optional text field, same "missing from submission -> schema default
+    # fills it in" mechanism as the verify_* fields above -- confirms a
+    # blank notify service is accepted, not a validation error.
+    assert subentry.data[CONF_VERIFY_OFF_NOTIFY_SERVICE] == ""
     assert subentry.title == "Front Porch Renamed"
     # Editing does NOT create a second subentry -- same subentry_id.
     assert len(live_entry.subentries) == 1
@@ -180,6 +185,10 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
             CONF_VERIFY_RETRY_COUNT: "3",
             CONF_VERIFY_CHECK_DELAY: "60",
             CONF_VERIFY_OFF_ENABLED: True,
+            # Obviously-fake value -- never a real phone-specific string in
+            # a tracked file, per the privacy requirement this field exists
+            # to uphold (see const.py's CONF_VERIFY_OFF_NOTIFY_SERVICE).
+            CONF_VERIFY_OFF_NOTIFY_SERVICE: "notify.mobile_app_test_phone",
         },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -193,6 +202,7 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
     assert back_yard.data[CONF_VERIFY_RETRY_COUNT] == 3
     assert back_yard.data[CONF_VERIFY_CHECK_DELAY] == 60
     assert back_yard.data[CONF_VERIFY_OFF_ENABLED] is True
+    assert back_yard.data[CONF_VERIFY_OFF_NOTIFY_SERVICE] == "notify.mobile_app_test_phone"
 
 
 async def test_removing_a_light_stops_it_being_scheduled_without_a_reload(hass, freezer):

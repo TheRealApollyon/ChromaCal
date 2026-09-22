@@ -95,9 +95,12 @@ from .scheduling.models import NightSegment, UpcomingEvent
 from .scheduling.sunset import resolve_sunset_hour
 from .scheduling.verify import (
     VERIFY_RETRY_INTERVAL_SECONDS,
+    VerifyOffResult,
     build_retry_command,
+    decide_verify_off_check,
     is_verifiable,
     state_matches,
+    verify_off_target_datetime,
 )
 
 # Desired-fire-keys that mean "do nothing" -- an existing sunset/sunrise
@@ -116,6 +119,13 @@ def _verify_notification_id(light_entity: str) -> str:
     existing notification instead of stacking a new one, and a later
     success can find and dismiss it by this same id."""
     return f"{DOMAIN}_verify_{light_entity}"
+
+
+def _verify_off_notification_id(light_entity: str) -> str:
+    """Distinct prefix from _verify_notification_id above -- Verify Off
+    and Plan A's own verify-and-retry are independent mechanisms and must
+    never overwrite/dismiss each other's notification."""
+    return f"{DOMAIN}_verify_off_{light_entity}"
 
 # _manual_override source tags -- which mechanism currently owns a light's
 # override, so cleanup only ever clears an entry it still owns (see
@@ -309,6 +319,15 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         # chains for one light can never both be live at once.
         self._verify_state: dict[str, VerifyState] = {}
         self._verify_pending_unsub: dict[str, Callable[[], None]] = {}
+        # Verify Off: a separate, independent pending-timer map from
+        # _verify_pending_unsub above -- Plan A's verify_enabled and
+        # verify_off_enabled are two different toggles that can each be on
+        # or off independently, so their scheduling must never share state
+        # (see _call_fire_command_verified). No result dict of its own --
+        # unlike Plan A, nothing currently reads a "last Verify Off
+        # outcome" back (it's a fire-and-forget nightly notification, not
+        # a status a panel surface displays).
+        self._verify_off_pending_unsub: dict[str, Callable[[], None]] = {}
 
     @property
     def lights(self) -> list[dict[str, Any]]:
@@ -777,10 +796,25 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         transition) before an earlier chain finished, only the newest
         chain should be live; two overlapping chains for one light would
         double-fire retries and could report a stale result.
+
+        Verify Off scheduling lives here too, ahead of Plan A's own
+        verify_enabled early-return below -- it's a genuinely independent
+        toggle (a light can have verify_enabled=False, verify_off_enabled=
+        True, or any other combination), so it must not be affected by
+        that return. Cancelling any previous pending Verify Off check on
+        every fire (not just an 'off' one) closes the same real gap
+        _cancel_pending_verify closes above: if Force White fires later
+        that same night (goes through this same method), a stale check
+        from the original scheduled 'off' must not survive to misreport
+        against a now-deliberately-on light.
         """
         await self._call_fire_command(light_entity, light, key, command)
 
         self._cancel_pending_verify(light_entity)
+        self._cancel_pending_verify_off(light_entity)
+        if key == "off" and light.verify_off_enabled:
+            self._schedule_verify_off_check(light_entity, light)
+
         if not light.verify_enabled or not is_verifiable(command):
             return
 
@@ -799,6 +833,79 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
         unsub = self._verify_pending_unsub.pop(light_entity, None)
         if unsub is not None:
             unsub()
+
+    def _cancel_pending_verify_off(self, light_entity: str) -> None:
+        unsub = self._verify_off_pending_unsub.pop(light_entity, None)
+        if unsub is not None:
+            unsub()
+
+    def _schedule_verify_off_check(self, light_entity: str, light: LightConfig) -> None:
+        """Arm a one-shot check at light.schedule_end_time + 30 minutes,
+        real clock time -- matches v1's verifyH = cfgEnd + 0.5 exactly.
+        Clamped to fire immediately (delay 0) if that instant has already
+        passed by the time this runs -- a real possibility if a manual
+        override delayed the 'off' fire itself past the target.
+        """
+        now = dt_util.now()
+        target = verify_off_target_datetime(now, light) + timedelta(minutes=30)
+        delay = max((target - now).total_seconds(), 0.0)
+
+        async def _check(_now: datetime) -> None:
+            await self._run_verify_off_check(light_entity, light)
+
+        self._verify_off_pending_unsub[light_entity] = async_call_later(self.hass, delay, _check)
+
+    async def _run_verify_off_check(self, light_entity: str, light: LightConfig) -> None:
+        """The actual Verify Off check: read real state, decide, notify --
+        either outcome, per Shane's own confirmation (v1 only notified on
+        failure). Skips entirely (no notification either way) if something
+        else currently owns this light -- Salute/Emergency fire via raw
+        _call_fire_command, not this method's _verified wrapper, so they
+        don't get the cancel-on-every-fire treatment above; checking here
+        instead covers that gap without threading a cancel call into every
+        override's own start path.
+        """
+        self._verify_off_pending_unsub.pop(light_entity, None)  # this timer just fired
+        if self._is_overridden(light_entity):
+            _LOGGER.info(
+                "ChromaCal: skipping Verify Off check for %s -- a manual override is active",
+                light.name or light_entity,
+            )
+            return
+
+        state = self.hass.states.get(light_entity)
+        actual_state = state.state if state is not None else None
+        off_target = verify_off_target_datetime(dt_util.now(), light)
+        minutes_past = (dt_util.now() - off_target).total_seconds() / 60
+        result = decide_verify_off_check(light.name or light_entity, actual_state, minutes_past)
+        await self._notify_verify_off(light_entity, light, result)
+
+    async def _notify_verify_off(
+        self, light_entity: str, light: LightConfig, result: VerifyOffResult
+    ) -> None:
+        title = "💡 ChromaCal: Confirmed Off" if result.success else "💡 ChromaCal: Verify Off Failed"
+        persistent_notification.async_create(
+            self.hass,
+            result.message,
+            title=title,
+            notification_id=_verify_off_notification_id(light_entity),
+        )
+
+        service = light.verify_off_notify_service
+        if not service or "." not in service:
+            return
+        domain, _, svc = service.partition(".")
+        try:
+            await self.hass.services.async_call(
+                domain, svc, {"message": result.message, "title": title}
+            )
+        except HomeAssistantError as err:
+            _LOGGER.error(
+                "ChromaCal: Verify Off notify service %s failed for %s: %s",
+                service,
+                light.name or light_entity,
+                err,
+            )
 
     async def _run_verify_check(
         self,

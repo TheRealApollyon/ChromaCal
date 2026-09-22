@@ -1,15 +1,22 @@
 """Tests for verify-and-retry's pure logic: does a light's real state
-match what a FireCommand asked for, and what should a retry send?
+match what a FireCommand asked for, and what should a retry send? Also
+covers Verify Off's own pure check-and-decide logic (a separate, passive
+monitor-and-alert mechanism -- see coordinator.py's _run_verify_off_check).
 """
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from scheduling.engine import LightConfig
 from scheduling.fire import FireCommand
 from scheduling.verify import (
     RETRY_TRANSITION_SECONDS,
     build_retry_command,
+    decide_verify_off_check,
     is_verifiable,
     state_matches,
+    verify_off_target_datetime,
 )
 
 OFF_COMMAND = FireCommand("light", "turn_off", {"transition": 120})
@@ -104,3 +111,44 @@ def test_build_retry_command_swaps_transition_only():
 def test_build_retry_command_with_no_transition_key_is_a_no_op():
     command = FireCommand("light", "turn_on", {"brightness": 255})
     assert build_retry_command(command) == command
+
+
+# ── Verify Off ────────────────────────────────────────────────────────────
+
+
+def test_verify_off_target_datetime_is_todays_schedule_end_time():
+    light = LightConfig(name="Porch", end_type="time", end_time="23:00")
+    now = datetime(2026, 7, 23, 12, 0)
+    assert verify_off_target_datetime(now, light) == datetime(2026, 7, 23, 23, 0)
+
+
+def test_verify_off_target_datetime_inherits_resolve_cfg_end_hour_truncation():
+    # Same real, documented v1-faithful truncation as
+    # test_resolve_cfg_end_hour_truncates_minutes_matching_v1_behavior --
+    # this must land on the exact instant Tonight's Schedule already
+    # displays, not a more "correct" rounded one.
+    light = LightConfig(name="Porch", end_type="time", end_time="23:45")
+    now = datetime(2026, 7, 23, 12, 0)
+    assert verify_off_target_datetime(now, light) == datetime(2026, 7, 23, 23, 0)
+
+
+def test_decide_verify_off_check_success_when_actually_off():
+    result = decide_verify_off_check("Front Porch", "off", minutes_past_off=30)
+    assert result.success is True
+    assert "Front Porch" in result.message
+    assert "confirmed off" in result.message
+
+
+def test_decide_verify_off_check_failure_when_still_on():
+    result = decide_verify_off_check("Front Porch", "on", minutes_past_off=30)
+    assert result.success is False
+    assert "Front Porch" in result.message
+    assert "on" in result.message
+    assert "30 minute" in result.message
+
+
+def test_decide_verify_off_check_failure_shows_unknown_for_missing_state():
+    result = decide_verify_off_check("Front Porch", None, minutes_past_off=45)
+    assert result.success is False
+    assert "unknown" in result.message
+    assert "45 minute" in result.message

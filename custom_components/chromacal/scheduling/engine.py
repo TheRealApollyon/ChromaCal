@@ -88,6 +88,10 @@ class LightConfig:
     # above) -- this pass only displays it (Tonight's Schedule), no check
     # logic reads it yet. See const.py's CONF_VERIFY_OFF_ENABLED.
     verify_off_enabled: bool = False
+    # Optional notify service for Verify Off's outcome -- see const.py's
+    # CONF_VERIFY_OFF_NOTIFY_SERVICE. "" (not None) so a blank check is a
+    # plain falsy check at every call site, same idiom as CONF_ZONE.
+    verify_off_notify_service: str = ""
     # Sunset-synced fade-in -- see const.py's CONF_SUNSET_FADE_ENABLED for
     # why this exists and defaults off. get_desired_fire_key() below is
     # the only reader of these three.

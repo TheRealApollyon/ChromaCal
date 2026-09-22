@@ -17,8 +17,10 @@ short transition instead of replaying the full fade.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 
+from .engine import LightConfig, resolve_cfg_end_hour
 from .fire import FireCommand
 
 # Between-retries delay. The initial post-fire delay before the first check
@@ -114,4 +116,48 @@ def build_retry_command(command: FireCommand) -> FireCommand:
     return replace(
         command,
         service_data={**command.service_data, "transition": RETRY_TRANSITION_SECONDS},
+    )
+
+
+# ── Verify Off: a fixed clock-time check-and-notify, distinct from the
+# verify-and-retry above -- see const.py's CONF_VERIFY_OFF_ENABLED. Passive
+# monitor-and-alert only, no retry/re-fire of its own; the verify-and-retry
+# above already owns retry-after-fire, and layering a second retry
+# mechanism onto the same light would fight it. ──────────────────────────
+
+
+def verify_off_target_datetime(now: datetime, light: LightConfig) -> datetime:
+    """Today's schedule_end_time as a real datetime -- the actual check
+    instant is this plus 30 minutes; "how late" at check-time is measured
+    from this same anchor. Routed through resolve_cfg_end_hour, so it
+    inherits that function's own documented whole-hour truncation and
+    always lands on the exact instant Tonight's Schedule's Lights Off/
+    Verify Off rows already display -- the check never disagrees with
+    what the panel promised.
+    """
+    cfg_end_hour = resolve_cfg_end_hour(light)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(hours=cfg_end_hour)
+
+
+@dataclass(frozen=True)
+class VerifyOffResult:
+    """What a Verify Off check found, and the message to notify with --
+    always a real message, never None, since Shane wants both outcomes
+    announced (v1 only ever alerted on failure)."""
+
+    success: bool
+    message: str
+
+
+def decide_verify_off_check(
+    light_name: str, actual_state: str | None, minutes_past_off: float
+) -> VerifyOffResult:
+    """Pure decision: does light_name's real reported state confirm it's
+    off, and what should the notification say either way?"""
+    if actual_state == "off":
+        return VerifyOffResult(True, f"**{light_name}** confirmed off.")
+    return VerifyOffResult(
+        False,
+        f"**{light_name}** should be off, but still reports **{actual_state or 'unknown'}**, "
+        f"{minutes_past_off:.0f} minute(s) past its scheduled off time.",
     )

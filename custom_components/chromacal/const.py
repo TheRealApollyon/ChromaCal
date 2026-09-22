@@ -87,11 +87,18 @@ CONF_VERIFY_CHECK_DELAY = "verify_check_delay"
 # fire command, not on a fixed schedule) -- ported from v1's
 # verifyOffEnabled toggle. Default False matches v1's own real behavior:
 # `verifyOffOn = !!(light?.verifyOffEnabled)`, no `?? true` fallback, so an
-# unset light was off by default there too, not on. This pass only exposes
-# the toggle's state and the computed timestamp (Tonight's Schedule, pure
-# frontend math off schedule_end_time) -- the actual check-and-notify
-# mechanism is deliberately out of scope, a separate later pass.
+# unset light was off by default there too, not on.
 CONF_VERIFY_OFF_ENABLED = "verify_off_enabled"
+
+# Optional per-light notify target for Verify Off's outcome, e.g.
+# "notify.mobile_app_pixel". A plain string Shane fills in on HIS instance
+# only -- lives in this config entry's local .storage/, never committed.
+# Deliberately NOT a hardcoded notify.mobile_app_* anywhere in this repo:
+# grepped for any notify./mobile_app reference before adding this field --
+# none existed, and this keeps it that way. Blank (the default) falls back
+# to persistent_notification only, matching Plan A's existing pattern, so
+# the feature still works for anyone else running this integration.
+CONF_VERIFY_OFF_NOTIFY_SERVICE = "verify_off_notify_service"
 
 # ── Regions — matches the 8 wizard region tiles in chromacal.html ──
 REGIONS = {

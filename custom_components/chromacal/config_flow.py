@@ -55,6 +55,7 @@ from .const import (
     CONF_VERIFY_CHECK_DELAY,
     CONF_VERIFY_ENABLED,
     CONF_VERIFY_OFF_ENABLED,
+    CONF_VERIFY_OFF_NOTIFY_SERVICE,
     CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
     CONF_WARMWHITE_TIME,
@@ -220,6 +221,10 @@ def _light_schema(light: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(
                 CONF_VERIFY_OFF_ENABLED, default=light.get(CONF_VERIFY_OFF_ENABLED, False)
             ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_VERIFY_OFF_NOTIFY_SERVICE,
+                default=light.get(CONF_VERIFY_OFF_NOTIFY_SERVICE, ""),
+            ): selector.TextSelector(),
         }
     )
 
@@ -246,6 +251,7 @@ def _light_dict_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_VERIFY_RETRY_COUNT: int(user_input[CONF_VERIFY_RETRY_COUNT]),
         CONF_VERIFY_CHECK_DELAY: int(user_input[CONF_VERIFY_CHECK_DELAY]),
         CONF_VERIFY_OFF_ENABLED: user_input[CONF_VERIFY_OFF_ENABLED],
+        CONF_VERIFY_OFF_NOTIFY_SERVICE: user_input.get(CONF_VERIFY_OFF_NOTIFY_SERVICE, ""),
     }
 
 

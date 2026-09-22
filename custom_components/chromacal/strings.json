@@ -36,7 +36,8 @@
           "verify_enabled": "Verify on/off after firing",
           "verify_retry_count": "Retry attempts",
           "verify_check_delay": "Initial check delay (seconds)",
-          "verify_off_enabled": "Verify lights are off 30 min after off-time"
+          "verify_off_enabled": "Verify lights are off 30 min after off-time",
+          "verify_off_notify_service": "Notify service for off-verification (e.g. notify.mobile_app_pixel) — optional"
         }
       },
       "reconfigure_region": {
@@ -88,7 +89,8 @@
             "verify_enabled": "Verify on/off after firing",
             "verify_retry_count": "Retry attempts",
             "verify_check_delay": "Initial check delay (seconds)",
-            "verify_off_enabled": "Verify lights are off 30 min after off-time"
+            "verify_off_enabled": "Verify lights are off 30 min after off-time",
+            "verify_off_notify_service": "Notify service for off-verification (e.g. notify.mobile_app_pixel) — optional"
           }
         },
         "reconfigure": {
@@ -112,7 +114,8 @@
             "verify_enabled": "Verify on/off after firing",
             "verify_retry_count": "Retry attempts",
             "verify_check_delay": "Initial check delay (seconds)",
-            "verify_off_enabled": "Verify lights are off 30 min after off-time"
+            "verify_off_enabled": "Verify lights are off 30 min after off-time",
+            "verify_off_notify_service": "Notify service for off-verification (e.g. notify.mobile_app_pixel) — optional"
           }
         }
       },
