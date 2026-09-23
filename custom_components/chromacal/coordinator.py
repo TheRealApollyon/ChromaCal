@@ -883,6 +883,12 @@ class ChromaCalCoordinator(DataUpdateCoordinator[dict[str, LightSchedule]]):
     async def _notify_verify_off(
         self, light_entity: str, light: LightConfig, result: VerifyOffResult
     ) -> None:
+        # Success is the only outcome this toggle ever silences -- failure
+        # always gets through regardless, since the whole point of Verify
+        # Off is that problems are never the thing that goes quiet.
+        if result.success and not light.verify_off_notify_on_success:
+            return
+
         title = "💡 ChromaCal: Confirmed Off" if result.success else "💡 ChromaCal: Verify Off Failed"
         persistent_notification.async_create(
             self.hass,

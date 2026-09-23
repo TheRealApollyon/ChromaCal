@@ -92,6 +92,9 @@ class LightConfig:
     # CONF_VERIFY_OFF_NOTIFY_SERVICE. "" (not None) so a blank check is a
     # plain falsy check at every call site, same idiom as CONF_ZONE.
     verify_off_notify_service: str = ""
+    # Whether a successful check still notifies -- see const.py's
+    # CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS. Never read for the failure path.
+    verify_off_notify_on_success: bool = True
     # Sunset-synced fade-in -- see const.py's CONF_SUNSET_FADE_ENABLED for
     # why this exists and defaults off. get_desired_fire_key() below is
     # the only reader of these three.

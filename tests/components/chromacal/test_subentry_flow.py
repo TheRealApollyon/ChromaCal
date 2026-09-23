@@ -21,6 +21,7 @@ from custom_components.chromacal.const import (
     CONF_VERIFY_CHECK_DELAY,
     CONF_VERIFY_ENABLED,
     CONF_VERIFY_OFF_ENABLED,
+    CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS,
     CONF_VERIFY_OFF_NOTIFY_SERVICE,
     CONF_VERIFY_RETRY_COUNT,
     CONF_WARMWHITE_ENABLED,
@@ -154,6 +155,9 @@ async def test_edit_light_updates_its_subentry_data(hass, freezer):
     # fills it in" mechanism as the verify_* fields above -- confirms a
     # blank notify service is accepted, not a validation error.
     assert subentry.data[CONF_VERIFY_OFF_NOTIFY_SERVICE] == ""
+    # Default True -- every existing config keeps notifying on both
+    # outcomes unless Shane explicitly turns this off later.
+    assert subentry.data[CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS] is True
     assert subentry.title == "Front Porch Renamed"
     # Editing does NOT create a second subentry -- same subentry_id.
     assert len(live_entry.subentries) == 1
@@ -189,6 +193,7 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
             # a tracked file, per the privacy requirement this field exists
             # to uphold (see const.py's CONF_VERIFY_OFF_NOTIFY_SERVICE).
             CONF_VERIFY_OFF_NOTIFY_SERVICE: "notify.mobile_app_test_phone",
+            CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS: False,
         },
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -202,6 +207,7 @@ async def test_verify_fields_can_be_set_explicitly(hass, freezer):
     assert back_yard.data[CONF_VERIFY_RETRY_COUNT] == 3
     assert back_yard.data[CONF_VERIFY_CHECK_DELAY] == 60
     assert back_yard.data[CONF_VERIFY_OFF_ENABLED] is True
+    assert back_yard.data[CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS] is False
     assert back_yard.data[CONF_VERIFY_OFF_NOTIFY_SERVICE] == "notify.mobile_app_test_phone"
 
 

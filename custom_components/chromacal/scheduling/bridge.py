@@ -70,6 +70,7 @@ def build_light_config(light_data: dict[str, Any]) -> LightConfig:
         verify_check_delay=light_data.get("verify_check_delay", 180),
         verify_off_enabled=light_data.get("verify_off_enabled", False),
         verify_off_notify_service=light_data.get("verify_off_notify_service", ""),
+        verify_off_notify_on_success=light_data.get("verify_off_notify_on_success", True),
         sunset_fade_enabled=light_data.get("sunset_fade_enabled", False),
         sunset_fade_offset_min=light_data.get("sunset_fade_offset_min", 30),
         sunset_fade_duration_sec=light_data.get("sunset_fade_duration_sec", 2700),

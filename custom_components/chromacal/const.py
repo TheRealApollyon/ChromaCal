@@ -100,6 +100,14 @@ CONF_VERIFY_OFF_ENABLED = "verify_off_enabled"
 # the feature still works for anyone else running this integration.
 CONF_VERIFY_OFF_NOTIFY_SERVICE = "verify_off_notify_service"
 
+# Whether a successful Verify Off check still notifies ("all clear", both
+# outcomes -- today's real behavior) or stays silent (failure-only, like
+# Plan A's own verify-and-retry always has been). Default True so every
+# existing config keeps notifying on both outcomes unless Shane explicitly
+# turns this off. Never gates the failure path -- problems always get
+# through regardless of this toggle.
+CONF_VERIFY_OFF_NOTIFY_ON_SUCCESS = "verify_off_notify_on_success"
+
 # ── Regions — matches the 8 wizard region tiles in chromacal.html ──
 REGIONS = {
     "us": "United States",

@@ -126,6 +126,69 @@ async def test_check_confirms_off_sends_success_notification(hass, freezer):
     assert "Confirmed Off" in kwargs["title"]
 
 
+async def test_success_notifies_by_default_matching_todays_real_behavior(hass, freezer):
+    """verify_off_notify_on_success defaults to True -- explicit regression
+    guard that today's real behavior (both outcomes notify) doesn't change
+    for a light that never touches this new field."""
+    freezer.move_to("2026-07-04 23:30:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_verify_off_success_default_unchanged")
+    coordinator = entry.runtime_data
+    light = coordinator.light_config_for(FRONT_ENTITY)
+    assert light.verify_off_notify_on_success is True  # the default itself
+    hass.states.async_set(FRONT_ENTITY, "off")
+
+    with patch(
+        "custom_components.chromacal.coordinator.persistent_notification.async_create"
+    ) as mock_notify:
+        await coordinator._run_verify_off_check(FRONT_ENTITY, light)
+
+    mock_notify.assert_called_once()
+
+
+async def test_success_is_silent_when_notify_on_success_is_false(hass, freezer):
+    """The new toggle's actual gate: persistent_notification and any
+    configured notify service both stay silent on a successful check --
+    no "all clear" noise anywhere, dashboard or phone."""
+    freezer.move_to("2026-07-04 23:30:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    notify_calls = async_mock_service(hass, "notify", "mobile_app_test_phone")
+    entry = await _setup_entry(hass, "test_verify_off_success_silenced")
+    coordinator = entry.runtime_data
+    light = replace(
+        coordinator.light_config_for(FRONT_ENTITY),
+        verify_off_notify_on_success=False,
+        verify_off_notify_service="notify.mobile_app_test_phone",
+    )
+    hass.states.async_set(FRONT_ENTITY, "off")
+
+    with patch(
+        "custom_components.chromacal.coordinator.persistent_notification.async_create"
+    ) as mock_notify:
+        await coordinator._run_verify_off_check(FRONT_ENTITY, light)
+
+    mock_notify.assert_not_called()
+    assert len(notify_calls) == 0
+
+
+async def test_failure_still_notifies_even_when_notify_on_success_is_false(hass, freezer):
+    """The toggle only ever gates the success path -- a failure must
+    always get through, regardless of this setting."""
+    freezer.move_to("2026-07-04 23:30:00-05:00")
+    await hass.config.async_set_time_zone("America/Chicago")
+    entry = await _setup_entry(hass, "test_verify_off_failure_ignores_toggle")
+    coordinator = entry.runtime_data
+    light = replace(coordinator.light_config_for(FRONT_ENTITY), verify_off_notify_on_success=False)
+    hass.states.async_set(FRONT_ENTITY, "on")
+
+    with patch(
+        "custom_components.chromacal.coordinator.persistent_notification.async_create"
+    ) as mock_notify:
+        await coordinator._run_verify_off_check(FRONT_ENTITY, light)
+
+    mock_notify.assert_called_once()
+
+
 async def test_check_finds_still_on_sends_failure_notification_and_notify_service(hass, freezer):
     freezer.move_to("2026-07-04 23:30:00-05:00")
     await hass.config.async_set_time_zone("America/Chicago")
