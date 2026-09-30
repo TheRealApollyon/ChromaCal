@@ -39,9 +39,16 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
-from .const import DOMAIN, PANEL_STATIC_URL_BASE, PANEL_URL_PATH, PANEL_WEBCOMPONENT_NAME
+from .const import (
+    BRAND_STATIC_URL_BASE,
+    DOMAIN,
+    PANEL_STATIC_URL_BASE,
+    PANEL_URL_PATH,
+    PANEL_WEBCOMPONENT_NAME,
+)
 
 PANEL_DIST_DIR = Path(__file__).parent / "panel_dist"
+BRAND_DIR = Path(__file__).parent / "brand"
 
 
 def _module_url(version: str) -> str:
@@ -59,7 +66,10 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         return
 
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(PANEL_STATIC_URL_BASE, str(PANEL_DIST_DIR), False)]
+        [
+            StaticPathConfig(PANEL_STATIC_URL_BASE, str(PANEL_DIST_DIR), False),
+            StaticPathConfig(BRAND_STATIC_URL_BASE, str(BRAND_DIR), False),
+        ]
     )
 
     integration = await async_get_integration(hass, DOMAIN)

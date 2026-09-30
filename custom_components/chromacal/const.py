@@ -159,6 +159,12 @@ PANEL_URL_PATH = "chromacal"
 PANEL_STATIC_URL_BASE = "/chromacal_static"
 PANEL_WEBCOMPONENT_NAME = "chromacal-panel"
 
+# Serves brand/icon.png (the real hand-authored mark, previously only used
+# for HACS/publication listing) to the panel's own header -- a separate
+# static path from PANEL_STATIC_URL_BASE above since brand/ is a sibling
+# directory to panel_dist/, not a file inside it.
+BRAND_STATIC_URL_BASE = "/chromacal_static/brand"
+
 # ── Tonight's Pick / Color Override services ─────────────────────
 # Services, not entities -- neither maps to a stable, addressable thing:
 # Tonight's Pick's candidates change nightly (often empty), and Color

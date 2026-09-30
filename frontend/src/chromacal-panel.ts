@@ -192,8 +192,24 @@ export class ChromaCalPanel extends LitElement {
 
     return html`
       <div class="root">
+        <div class="hero">
+          <h1 class="hero-brand">
+            <img class="hero-logo" src="/chromacal_static/brand/icon.png" alt="" />
+            <span class="logo-c" style="color:#2563EB">C</span
+            ><span class="logo-c" style="color:#CC2200">H</span
+            ><span class="logo-c" style="color:#D4750A">R</span
+            ><span class="logo-c" style="color:#2ECC71">O</span
+            ><span class="logo-c" style="color:#CC44FF">M</span
+            ><span class="logo-c" style="color:#007E88">A</span
+            ><span class="logo-c" style="color:#E8B84B">C</span
+            ><span class="logo-c" style="color:#CC3377">A</span
+            ><span class="logo-c" style="color:#00C8E8">L</span>
+          </h1>
+          <div class="hero-line1">The whole world celebrates with light.</div>
+          <div class="hero-line2">Now you can too.</div>
+        </div>
+
         <header>
-          <h1>ChromaCal</h1>
           <div class="header-right">
             <a
               class="settings-link"
@@ -715,10 +731,66 @@ export class ChromaCalPanel extends LitElement {
         clip: rect(0 0 0 0);
       }
 
+      /* ── Hero (v1.1.0's real logo/wordmark/tagline, ported verbatim --
+         see dist/chromacal.html's .hero/.hero-brand/.logo-c/.hero-line1/2
+         at the v1.1.0 tag) -- full-bleed within the panel's own padded
+         bounds via negative margins, matching v1's edge-to-edge look. */
+      .hero {
+        text-align: center;
+        padding: 20px 16px 14px;
+        margin: -16px -16px 16px;
+        border-bottom: 1.5px solid var(--cc-border);
+        background: var(--cc-s1);
+      }
+
+      .hero-logo {
+        height: 36px;
+        width: 36px;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+
+      .hero-brand {
+        font-family: var(--cc-font);
+        font-size: clamp(22px, 5vw, 42px);
+        font-weight: 900;
+        letter-spacing: 6px;
+      }
+
+      .logo-c {
+        display: inline-block;
+        transition: opacity 0.3s;
+        text-shadow: 0 0 16px currentColor;
+      }
+
+      .hero-brand:hover .logo-c {
+        opacity: 0.8;
+      }
+
+      .hero-line1 {
+        font-family: var(--cc-font);
+        font-size: clamp(13px, 2.8vw, 20px);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: var(--cc-text);
+        line-height: 1.3;
+      }
+
+      .hero-line2 {
+        font-family: var(--cc-font);
+        font-size: clamp(12px, 2.4vw, 17px);
+        font-weight: 600;
+        color: var(--cc-accent);
+        margin-top: 3px;
+      }
+
       header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        /* Right-aligned, not space-between -- the old <h1>ChromaCal</h1>
+           that used to occupy the other flex slot moved into .hero above;
+           the toolbar itself is unchanged, still exactly where it was. */
+        justify-content: flex-end;
         margin-bottom: 16px;
       }
 
