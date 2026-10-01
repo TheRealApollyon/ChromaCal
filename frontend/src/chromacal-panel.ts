@@ -78,6 +78,11 @@ export class ChromaCalPanel extends LitElement {
 
   private static readonly MAX_COLORS = 6;
 
+  /** Footer clock -- ticks every second, same as v1's own update loop
+   * (`footer-clock.textContent = new Date().toLocaleTimeString()`). */
+  @state() private _clockText = "";
+  private _clockInterval?: ReturnType<typeof setInterval>;
+
   connectedCallback(): void {
     super.connectedCallback();
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -85,6 +90,33 @@ export class ChromaCalPanel extends LitElement {
       this._themePreset = stored as PresetId;
     }
     this._applyThemeAttribute();
+
+    this._clockText = new Date().toLocaleTimeString();
+    this._clockInterval = setInterval(() => {
+      this._clockText = new Date().toLocaleTimeString();
+    }, 1000);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearInterval(this._clockInterval);
+  }
+
+  /** The real installed integration version, e.g. "2.6.1" -- read from the
+   * panel's own module_url (frontend.py's _module_url() cache-busts it
+   * with "?v=<manifest version>" on every registration), not hardcoded
+   * here where it would silently drift from what's actually installed.
+   * Empty when `panel` isn't populated (e.g. the compact card, which never
+   * renders a footer at all -- see ChromaCalCard's own render() override). */
+  private _panelVersion(): string {
+    const moduleUrl = this.panel?.config?._panel_custom as { module_url?: string } | undefined;
+    const url = moduleUrl?.module_url;
+    if (!url) return "";
+    try {
+      return new URL(url, window.location.origin).searchParams.get("v") ?? "";
+    } catch {
+      return "";
+    }
   }
 
   private _applyThemeAttribute(): void {
@@ -334,6 +366,13 @@ export class ChromaCalPanel extends LitElement {
         </div>
 
         ${this._colorModalEvent ? this._renderColorModal() : nothing}
+
+        <footer>
+          <strong>Honor your heritage. Light your home.</strong> ·
+          ChromaCal <span>v${this._panelVersion()}</span> ·
+          <a href="https://github.com/TheRealApollyon/chromacal" target="_blank" rel="noopener">GitHub</a> ·
+          <span>${this._clockText}</span>
+        </footer>
       </div>
     `;
   }
@@ -782,6 +821,29 @@ export class ChromaCalPanel extends LitElement {
         font-weight: 600;
         color: var(--cc-accent);
         margin-top: 3px;
+      }
+
+      footer {
+        text-align: center;
+        padding: 14px 16px;
+        color: var(--cc-muted);
+        font-size: 13px;
+        border-top: 1.5px solid var(--cc-border);
+        margin: 16px -16px -16px;
+      }
+
+      footer a {
+        color: var(--cc-text);
+        text-decoration: none;
+        font-weight: 700;
+        border-bottom: 1.5px solid var(--cc-border);
+        padding-bottom: 1px;
+        transition: color 0.2s, border-color 0.2s;
+      }
+
+      footer a:hover {
+        color: var(--cc-accent);
+        border-color: var(--cc-accent);
       }
 
       header {
