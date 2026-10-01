@@ -1,4 +1,4 @@
-import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js";import{a as b}from"./chunk-JFKSI6I7.js";function Q(n){return{name:n.name,eventType:n.event_type,colors:n.colors,icon:n.icon,startTime:n.start_time,endTime:n.end_time}}function Z(n){return Object.values(n.entities).filter(c=>c.platform==="chromacal").map(c=>c.entity_id)}function ee(n){return n.split(".",1)[0]}function $(n){let c=Z(n),e={saluteEntityId:null,saluteRunning:!1,catchUpEntityId:null,stopEntityId:null,emergencyEntityId:null,emergencyOn:!1},t=new Map,o=new Map,i=[],d=[],f=null,w=null;for(let r of c){let v=n.states[r];if(!v)continue;let g=v.attributes,l=ee(r);if(l==="button"){let k=g.role;k==="salute"?(e.saluteEntityId=r,e.saluteRunning=!!g.running):k==="catch_up_sync"?e.catchUpEntityId=r:k==="stop"?e.stopEntityId=r:k==="force_white"&&typeof g.light_entity=="string"&&o.set(g.light_entity,r);continue}if(l==="switch"){let k=g.role;if(k==="emergency_mode")e.emergencyEntityId=r,e.emergencyOn=v.state==="on";else if(k==="skip"&&typeof g.event_name=="string"){let A={entityId:r,eventName:g.event_name,isOn:v.state==="on"};g.scope==="tonight"?i.push(A):d.push(A)}continue}l==="sensor"&&(g.role==="upcoming_events"?f=r:g.role==="house_view"?w=r:typeof g.light_entity=="string"&&t.set(g.light_entity,r))}let x=[];for(let[r,v]of t){let g=n.states[v],l=g?.attributes??{},k=l.light_name??r;x.push({lightEntity:r,lightName:k,scheduleEntityId:v,forceWhiteEntityId:o.get(r)??null,currentEventName:g?.state||null,currentEventType:l.event_type??null,currentColors:l.colors??[],currentIcon:l.icon??null,currentStart:l.start_time??null,currentEnd:l.end_time??null,segments:(l.segments??[]).map(Q),sunsetHour:l.sunset_hour??null,scheduleEndTime:l.schedule_end_time??null,fadeIn:l.fade_in??null,fadeOut:l.fade_out??null,warmwhiteTime:l.warmwhite_time??null,warmwhiteEnabled:l.warmwhite_enabled??!1,verifyEnabled:l.verify_enabled??!1,verifyOffEnabled:l.verify_off_enabled??!1,sunsetFadeEnabled:l.sunset_fade_enabled??!1,sunsetFadeOffsetMin:l.sunset_fade_offset_min??null,overrideSource:l.override_source??null,verifyResult:l.verify_result??null,verifyCheckedAt:l.verify_checked_at??null,verifyAttemptsUsed:l.verify_attempts_used??null})}x.sort((r,v)=>r.lightName.localeCompare(v.lightName)),i.sort((r,v)=>r.eventName.localeCompare(v.eventName)),d.sort((r,v)=>r.eventName.localeCompare(v.eventName));let m=new Map(d.map(r=>[r.eventName,r])),a=new Map(i.map(r=>[r.eventName,r])),u=f?n.states[f]?.attributes:void 0,C=u?.events??[],q=u?.tonight_pick??null,Y=u?.color_overrides??{},K=C.map(r=>({date:r.date,name:r.name,category:r.category,eventType:r.event_type,icon:r.icon,colors:r.colors,isToday:r.is_today,isPersonalRange:r.is_personal_range,permanentSkip:m.get(r.name)??null,tonightSkip:r.is_today?a.get(r.name)??null:null,isPicked:r.is_today&&q===r.name,overrideColors:Y[r.name]??null})),I=w?n.states[w]?.attributes:void 0,J={mode:I?.mode??"2d",path:I?.path??"",markers:(I?.markers??[]).map(r=>({id:r.id,mode:r.mode,x:r.x,y:r.y,z:r.z,lightEntity:r.light_entity}))};return{globals:e,lights:x,tonightSkips:i,permanentSkips:d,upcomingEvents:K,houseView:J}}var P=M`
+import{a as M,b as s,c as u,d as W,e as z,f as T,g as y}from"./chunk-5VH4SVWE.js";import{a as f}from"./chunk-JFKSI6I7.js";function Z(o){return{name:o.name,eventType:o.event_type,colors:o.colors,icon:o.icon,startTime:o.start_time,endTime:o.end_time}}function ee(o){return Object.values(o.entities).filter(c=>c.platform==="chromacal").map(c=>c.entity_id)}function te(o){return o.split(".",1)[0]}function $(o){let c=ee(o),e={saluteEntityId:null,saluteRunning:!1,catchUpEntityId:null,stopEntityId:null,emergencyEntityId:null,emergencyOn:!1},t=new Map,n=new Map,i=[],d=[],v=null,w=null;for(let r of c){let b=o.states[r];if(!b)continue;let g=b.attributes,l=te(r);if(l==="button"){let _=g.role;_==="salute"?(e.saluteEntityId=r,e.saluteRunning=!!g.running):_==="catch_up_sync"?e.catchUpEntityId=r:_==="stop"?e.stopEntityId=r:_==="force_white"&&typeof g.light_entity=="string"&&n.set(g.light_entity,r);continue}if(l==="switch"){let _=g.role;if(_==="emergency_mode")e.emergencyEntityId=r,e.emergencyOn=b.state==="on";else if(_==="skip"&&typeof g.event_name=="string"){let H={entityId:r,eventName:g.event_name,isOn:b.state==="on"};g.scope==="tonight"?i.push(H):d.push(H)}continue}l==="sensor"&&(g.role==="upcoming_events"?v=r:g.role==="house_view"?w=r:typeof g.light_entity=="string"&&t.set(g.light_entity,r))}let x=[];for(let[r,b]of t){let g=o.states[b],l=g?.attributes??{},_=l.light_name??r;x.push({lightEntity:r,lightName:_,scheduleEntityId:b,forceWhiteEntityId:n.get(r)??null,currentEventName:g?.state||null,currentEventType:l.event_type??null,currentColors:l.colors??[],currentIcon:l.icon??null,currentStart:l.start_time??null,currentEnd:l.end_time??null,segments:(l.segments??[]).map(Z),sunsetHour:l.sunset_hour??null,scheduleEndTime:l.schedule_end_time??null,fadeIn:l.fade_in??null,fadeOut:l.fade_out??null,warmwhiteTime:l.warmwhite_time??null,warmwhiteEnabled:l.warmwhite_enabled??!1,verifyEnabled:l.verify_enabled??!1,verifyOffEnabled:l.verify_off_enabled??!1,sunsetFadeEnabled:l.sunset_fade_enabled??!1,sunsetFadeOffsetMin:l.sunset_fade_offset_min??null,overrideSource:l.override_source??null,verifyResult:l.verify_result??null,verifyCheckedAt:l.verify_checked_at??null,verifyAttemptsUsed:l.verify_attempts_used??null})}x.sort((r,b)=>r.lightName.localeCompare(b.lightName)),i.sort((r,b)=>r.eventName.localeCompare(b.eventName)),d.sort((r,b)=>r.eventName.localeCompare(b.eventName));let m=new Map(d.map(r=>[r.eventName,r])),a=new Map(i.map(r=>[r.eventName,r])),h=v?o.states[v]?.attributes:void 0,I=h?.events??[],Y=h?.tonight_pick??null,K=h?.color_overrides??{},J=I.map(r=>({date:r.date,name:r.name,category:r.category,eventType:r.event_type,icon:r.icon,colors:r.colors,isToday:r.is_today,isPersonalRange:r.is_personal_range,permanentSkip:m.get(r.name)??null,tonightSkip:r.is_today?a.get(r.name)??null:null,isPicked:r.is_today&&Y===r.name,overrideColors:K[r.name]??null})),R=w?o.states[w]?.attributes:void 0,Q={mode:R?.mode??"2d",path:R?.path??"",markers:(R?.markers??[]).map(r=>({id:r.id,mode:r.mode,x:r.x,y:r.y,z:r.z,lightEntity:r.light_entity}))};return{globals:e,lights:x,tonightSkips:i,permanentSkips:d,upcomingEvents:J,houseView:Q}}var P=M`
   :host {
     --cc-bg: var(--primary-background-color, #fafafa);
     --cc-s1: var(--card-background-color, #fff);
@@ -13,7 +13,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
     --cc-font: inherit;
     --cc-radius: var(--ha-card-border-radius, 12px);
   }
-`,L=["native","daylight","twilight","scifi","mono"],V={native:"Match dashboard theme",daylight:"Daylight",twilight:"Twilight",scifi:"Sci-Fi",mono:"Mono"},W=M`
+`,L=["native","daylight","twilight","scifi","mono"],V={native:"Match dashboard theme",daylight:"Daylight",twilight:"Twilight",scifi:"Sci-Fi",mono:"Mono"},F=M`
   :host([data-theme="daylight"]) {
     --cc-bg: #f0f2f8;
     --cc-s1: #ffffff;
@@ -69,7 +69,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
     --cc-muted: #aaaaaa;
     --cc-font: "Orbitron", monospace;
   }
-`;function U(n){let[c,e]=n.split(":").map(Number);return c*60+e}function D(n){return n>=960?n:n+1440}function E(n){return D(Math.round(n*60))}function _(n){return D(U(n))}function z(n){return Math.max(0,Math.min(100,(n-960)/960*100))}function F(n,c){let e=z(_(n)),t=z(_(c));return{leftPct:e,widthPct:Math.max(0,t-e)}}function S(n){let c=Math.round(n*60)%1440,e=Math.floor(c/60),t=c%60;return`${String(e).padStart(2,"0")}:${String(t).padStart(2,"0")}`}function N(n,c){if(c===null)return null;let e=_(c)-E(n);if(e<=0)return null;let t=Math.floor(e/60),o=e%60;return t>0?`${t}h ${o}m`:`${o}m`}function B(n,c){let e=((U(n)+c)%1440+1440)%1440,t=Math.floor(e/60),o=e%60;return`${String(t).padStart(2,"0")}:${String(o).padStart(2,"0")}`}function G(n,c){let e=E(c),t=[],o=n.segments[n.segments.length-1];if(o){let a=_(o.endTime),u=n.scheduleEndTime!==null?_(n.scheduleEndTime):null;u!==null&&a<u?(t.push({label:"WARM",time:o.endTime,windowMinutes:a,emphasize:!1,priority:0}),t.push({label:"OFF",time:n.scheduleEndTime,windowMinutes:u,emphasize:!0,priority:0})):t.push({label:"OFF",time:o.endTime,windowMinutes:a,emphasize:!0,priority:0})}if(t.push({label:"NOW",time:S(c),windowMinutes:e,emphasize:!1,priority:1}),n.sunsetHour!==null){let a=E(n.sunsetHour);a>e&&t.push({label:"SUNSET",time:S(n.sunsetHour),windowMinutes:a,emphasize:!1,priority:2})}let i=n.segments[0];if(i){let a=_(i.startTime);a>e&&t.push({label:"COLORS",time:i.startTime,windowMinutes:a,emphasize:!1,priority:2})}let d=9,f=t.map(a=>({...a,leftPct:z(a.windowMinutes)})),w=[...f].sort((a,u)=>a.priority-u.priority||a.windowMinutes-u.windowMinutes),x=[],m=new Map;for(let a of w){let u=a.priority>0&&x.some(C=>Math.abs(a.leftPct-C)<d);m.set(a,u),u||x.push(a.leftPct)}return f.sort((a,u)=>a.windowMinutes-u.windowMinutes).map(a=>({label:a.label,time:a.time,windowMinutes:a.windowMinutes,leftPct:a.leftPct,emphasize:a.emphasize,bare:m.get(a)??!1}))}var j="chromacal-panel-theme-preset",te=5,oe={force_white:"Force White",salute:"21 Gun Salute",emergency:"Emergency Mode"};function X(n,c){let e=n.replace("#",""),t=parseInt(e,16),o=t>>16&255,i=t>>8&255,d=t&255;return`rgba(${o}, ${i}, ${d}, ${c})`}var p=class extends H{constructor(){super(...arguments);this.narrow=!1;this._themePreset="native";this._skipFilter="";this._manageSkipsOpen=!1;this._controlsOpen=!1;this._houseViewOpen=!1;this._colorModalEvent=null;this._colorModalColors=[];this._colorModalPickerValue="#ffffff";this._clockText=""}connectedCallback(){super.connectedCallback();let e=localStorage.getItem(j);e&&L.includes(e)&&(this._themePreset=e),this._applyThemeAttribute(),this._clockText=new Date().toLocaleTimeString(),this._clockInterval=setInterval(()=>{this._clockText=new Date().toLocaleTimeString()},1e3)}disconnectedCallback(){super.disconnectedCallback(),clearInterval(this._clockInterval)}_panelVersion(){let t=this.panel?.config?._panel_custom?.module_url;if(!t)return"";try{return new URL(t,window.location.origin).searchParams.get("v")??""}catch{return""}}_applyThemeAttribute(){this._themePreset==="native"?this.removeAttribute("data-theme"):this.setAttribute("data-theme",this._themePreset)}_onThemeChange(e){let t=e.target.value;this._themePreset=t,localStorage.setItem(j,t),this._applyThemeAttribute()}_callService(e,t,o){o&&this.hass.callService(e,t,{entity_id:o})}_pressButton(e){this._callService("button","press",e)}_toggleSwitch(e,t){this._callService("switch",t?"turn_off":"turn_on",e)}_onHouseViewToggle(e){let t=e.target.open;this._houseViewOpen=t,t&&import("./house-view-BW6Y22GU.js")}_setTonightPick(e){this.hass.callService("chromacal","set_tonight_pick",{event_name:e})}_openColorModal(e){this._colorModalEvent=e.name,this._colorModalColors=[...e.overrideColors??e.colors]}_closeColorModal(){this._colorModalEvent=null,this._colorModalColors=[]}_addColorModalColor(){this._colorModalColors.length>=p.MAX_COLORS||(this._colorModalColors=[...this._colorModalColors,this._colorModalPickerValue])}_removeColorModalColor(e){this._colorModalColors=this._colorModalColors.filter((t,o)=>o!==e)}_moveColorModalColor(e,t){let o=e+t;if(o<0||o>=this._colorModalColors.length)return;let i=[...this._colorModalColors];[i[e],i[o]]=[i[o],i[e]],this._colorModalColors=i}_saveColorOverride(){!this._colorModalEvent||this._colorModalColors.length===0||(this.hass.callService("chromacal","set_color_override",{event_name:this._colorModalEvent,colors:this._colorModalColors}),this._closeColorModal())}_resetColorOverride(){this._colorModalEvent&&(this.hass.callService("chromacal","reset_color_override",{event_name:this._colorModalEvent}),this._closeColorModal())}render(){if(!this.hass)return h;let e=$(this.hass);return s`
+`;function U(o){let[c,e]=o.split(":").map(Number);return c*60+e}function D(o){return o>=960?o:o+1440}function E(o){return D(Math.round(o*60))}function k(o){return D(U(o))}function N(o){return Math.max(0,Math.min(100,(o-960)/960*100))}function B(o,c){let e=N(k(o)),t=N(k(c));return{leftPct:e,widthPct:Math.max(0,t-e)}}function S(o){let c=Math.round(o*60)%1440,e=Math.floor(c/60),t=c%60;return`${String(e).padStart(2,"0")}:${String(t).padStart(2,"0")}`}function A(o,c){if(c===null)return null;let e=k(c)-E(o);if(e<=0)return null;let t=Math.floor(e/60),n=e%60;return t>0?`${t}h ${n}m`:`${n}m`}function G(o,c){let e=((U(o)+c)%1440+1440)%1440,t=Math.floor(e/60),n=e%60;return`${String(t).padStart(2,"0")}:${String(n).padStart(2,"0")}`}function O(o){if(o<=0)return"0s";let c=Math.floor(o/60),e=o%60;return c>0?`${c}m${e>0?` ${e}s`:""}`:`${e}s`}function j(o,c){let e=E(c),t=[],n=o.segments[o.segments.length-1];if(n){let a=k(n.endTime),h=o.scheduleEndTime!==null?k(o.scheduleEndTime):null;h!==null&&a<h?(t.push({label:"WARM",time:n.endTime,windowMinutes:a,emphasize:!1,priority:0}),t.push({label:"OFF",time:o.scheduleEndTime,windowMinutes:h,emphasize:!0,priority:0})):t.push({label:"OFF",time:n.endTime,windowMinutes:a,emphasize:!0,priority:0})}if(t.push({label:"NOW",time:S(c),windowMinutes:e,emphasize:!1,priority:1}),o.sunsetHour!==null){let a=E(o.sunsetHour);a>e&&t.push({label:"SUNSET",time:S(o.sunsetHour),windowMinutes:a,emphasize:!1,priority:2})}let i=o.segments[0];if(i){let a=k(i.startTime);a>e&&t.push({label:"COLORS",time:i.startTime,windowMinutes:a,emphasize:!1,priority:2})}let d=9,v=t.map(a=>({...a,leftPct:N(a.windowMinutes)})),w=[...v].sort((a,h)=>a.priority-h.priority||a.windowMinutes-h.windowMinutes),x=[],m=new Map;for(let a of w){let h=a.priority>0&&x.some(I=>Math.abs(a.leftPct-I)<d);m.set(a,h),h||x.push(a.leftPct)}return v.sort((a,h)=>a.windowMinutes-h.windowMinutes).map(a=>({label:a.label,time:a.time,windowMinutes:a.windowMinutes,leftPct:a.leftPct,emphasize:a.emphasize,bare:m.get(a)??!1}))}var X="chromacal-panel-theme-preset",oe=5,ne={force_white:"Force White",salute:"21 Gun Salute",emergency:"Emergency Mode"};function q(o,c){let e=o.replace("#",""),t=parseInt(e,16),n=t>>16&255,i=t>>8&255,d=t&255;return`rgba(${n}, ${i}, ${d}, ${c})`}var p=class extends W{constructor(){super(...arguments);this.narrow=!1;this._themePreset="native";this._skipFilter="";this._manageSkipsOpen=!1;this._controlsOpen=!1;this._houseViewOpen=!1;this._colorModalEvent=null;this._colorModalColors=[];this._colorModalPickerValue="#ffffff";this._clockText=""}connectedCallback(){super.connectedCallback();let e=localStorage.getItem(X);e&&L.includes(e)&&(this._themePreset=e),this._applyThemeAttribute(),this._clockText=new Date().toLocaleTimeString(),this._clockInterval=setInterval(()=>{this._clockText=new Date().toLocaleTimeString()},1e3)}disconnectedCallback(){super.disconnectedCallback(),clearInterval(this._clockInterval)}_panelVersion(){let t=this.panel?.config?._panel_custom?.module_url;if(!t)return"";try{return new URL(t,window.location.origin).searchParams.get("v")??""}catch{return""}}_applyThemeAttribute(){this._themePreset==="native"?this.removeAttribute("data-theme"):this.setAttribute("data-theme",this._themePreset)}_onThemeChange(e){let t=e.target.value;this._themePreset=t,localStorage.setItem(X,t),this._applyThemeAttribute()}_callService(e,t,n){n&&this.hass.callService(e,t,{entity_id:n})}_pressButton(e){this._callService("button","press",e)}_toggleSwitch(e,t){this._callService("switch",t?"turn_off":"turn_on",e)}_onHouseViewToggle(e){let t=e.target.open;this._houseViewOpen=t,t&&import("./house-view-BW6Y22GU.js")}_setTonightPick(e){this.hass.callService("chromacal","set_tonight_pick",{event_name:e})}_openColorModal(e){this._colorModalEvent=e.name,this._colorModalColors=[...e.overrideColors??e.colors]}_closeColorModal(){this._colorModalEvent=null,this._colorModalColors=[]}_addColorModalColor(){this._colorModalColors.length>=p.MAX_COLORS||(this._colorModalColors=[...this._colorModalColors,this._colorModalPickerValue])}_removeColorModalColor(e){this._colorModalColors=this._colorModalColors.filter((t,n)=>n!==e)}_moveColorModalColor(e,t){let n=e+t;if(n<0||n>=this._colorModalColors.length)return;let i=[...this._colorModalColors];[i[e],i[n]]=[i[n],i[e]],this._colorModalColors=i}_saveColorOverride(){!this._colorModalEvent||this._colorModalColors.length===0||(this.hass.callService("chromacal","set_color_override",{event_name:this._colorModalEvent,colors:this._colorModalColors}),this._closeColorModal())}_resetColorOverride(){this._colorModalEvent&&(this.hass.callService("chromacal","reset_color_override",{event_name:this._colorModalEvent}),this._closeColorModal())}render(){if(!this.hass)return u;let e=$(this.hass);return s`
       <div class="root">
         <div class="hero">
           <h1 class="hero-brand">
@@ -151,7 +151,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
                     .hass=${this.hass}
                     .model=${e.houseView}
                     .lights=${e.lights}
-                  ></chromacal-house-view>`:h}
+                  ></chromacal-house-view>`:u}
             </details>
           </main>
 
@@ -199,7 +199,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
           </aside>
         </div>
 
-        ${this._colorModalEvent?this._renderColorModal():h}
+        ${this._colorModalEvent?this._renderColorModal():u}
 
         <footer>
           <strong>Honor your heritage. Light your home.</strong> ·
@@ -210,14 +210,14 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
       </div>
     `}_renderColorModal(){let e=this._colorModalEvent,t=this._colorModalColors;return s`
       <div class="modal-overlay" @click=${this._closeColorModal}>
-        <div class="modal-dialog" @click=${o=>o.stopPropagation()}>
+        <div class="modal-dialog" @click=${n=>n.stopPropagation()}>
           <h3>Customize colors</h3>
           <p class="modal-event-name">${e}</p>
 
           <div class="modal-chip-row">
-            ${t.length===0?s`<p class="muted">No colors -- add at least one below.</p>`:t.map((o,i)=>s`
+            ${t.length===0?s`<p class="muted">No colors -- add at least one below.</p>`:t.map((n,i)=>s`
                     <div class="modal-chip-item">
-                      <span class="modal-chip" style="background:${o}" title=${o}></span>
+                      <span class="modal-chip" style="background:${n}" title=${n}></span>
                       <div class="modal-chip-btns">
                         <button
                           class="chip-move-btn"
@@ -251,7 +251,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
             <input
               type="color"
               .value=${this._colorModalPickerValue}
-              @input=${o=>this._colorModalPickerValue=o.target.value}
+              @input=${n=>this._colorModalPickerValue=n.target.value}
             />
             <button
               class="control-btn"
@@ -277,7 +277,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
           </div>
         </div>
       </div>
-    `}_formatEventDate(e){return new Date(`${e}T00:00:00`).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}_renderUpcomingRow(e){let t=e.permanentSkip,o=e.tonightSkip;return s`
+    `}_formatEventDate(e){return new Date(`${e}T00:00:00`).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}_renderUpcomingRow(e){let t=e.permanentSkip,n=e.tonightSkip;return s`
       <div class="upcoming-row ${e.isToday?"today":""} ${t?.isOn?"skipped":""}">
         <span class="up-date">${e.isToday?"TODAY":this._formatEventDate(e.date)}</span>
         <span class="up-icon">${e.icon}</span>
@@ -286,13 +286,13 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
         <span class="up-chips">
           ${e.colors.map(i=>s`<span class="up-chip" style="background:${i}"></span>`)}
         </span>
-        ${e.isToday&&!t?.isOn&&!o?.isOn?s`<button
+        ${e.isToday&&!t?.isOn&&!n?.isOn?s`<button
               class="up-action-btn ${e.isPicked?"active":""}"
               @click=${()=>this._setTonightPick(e.name)}
               title=${e.isPicked?"Clear -- resume split":"Pick this event tonight"}
             >
               ${e.isPicked?"\u2605":"\u2606"}
-            </button>`:h}
+            </button>`:u}
         <button
           class="up-action-btn ${e.overrideColors?"active":""}"
           @click=${()=>this._openColorModal(e)}
@@ -300,20 +300,20 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
         >
           🎨
         </button>
-        ${o?s`<button
-              class="up-action-btn ${o.isOn?"active":""}"
-              @click=${()=>this._toggleSwitch(o.entityId,o.isOn)}
-              title=${o.isOn?"Skipped tonight -- click to restore":"Skip for tonight only (resets at midnight)"}
+        ${n?s`<button
+              class="up-action-btn ${n.isOn?"active":""}"
+              @click=${()=>this._toggleSwitch(n.entityId,n.isOn)}
+              title=${n.isOn?"Skipped tonight -- click to restore":"Skip for tonight only (resets at midnight)"}
             >
               🌙
-            </button>`:h}
+            </button>`:u}
         ${t?s`<button
               class="up-action-btn ${t.isOn?"active":""}"
               @click=${()=>this._toggleSwitch(t.entityId,t.isOn)}
               title=${t.isOn?"Re-enable -- this event will run again":"Permanently skip this event"}
             >
               ${t.isOn?"\u2298":"\u25CB"}
-            </button>`:h}
+            </button>`:u}
       </div>
     `}_renderSkipChip(e){return s`
       <button
@@ -323,7 +323,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
       >
         ${e.eventName}
       </button>
-    `}_renderOrb(e,t){let o=e.currentColors[0],i=e.currentColors.length>=te,d=o?`background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.45) 0%, ${o} 45%, rgba(0,0,0,.5) 100%); box-shadow: 0 0 ${t==="full"?"24px":"12px"} ${X(o,.627)}, 0 0 ${t==="full"?"46px":"23px"} ${X(o,.208)};`:"";return s`<div class="orb ${t} ${i?"spinning":""}" style=${d}></div>`}_renderLightGrid(e){return e.lights.length===0?s`<div class="empty-state">
+    `}_renderOrb(e,t){let n=e.currentColors[0],i=e.currentColors.length>=oe,d=n?`background: radial-gradient(circle at 38% 30%, rgba(255,255,255,.45) 0%, ${n} 45%, rgba(0,0,0,.5) 100%); box-shadow: 0 0 ${t==="full"?"24px":"12px"} ${q(n,.627)}, 0 0 ${t==="full"?"46px":"23px"} ${q(n,.208)};`:"";return s`<div class="orb ${t} ${i?"spinning":""}" style=${d}></div>`}_renderLightGrid(e){return e.lights.length===0?s`<div class="empty-state">
         <p>No lights configured yet.</p>
         <p class="muted">Add a light from ChromaCal's settings to see it here.</p>
       </div>`:s`<section class="light-grid ${this.narrow?"narrow":""}">
@@ -336,7 +336,7 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
             <span class="event-name-headline compact">${e.currentEventName??"\u2014"}</span>
           </div>
         </div>
-      `;let t=new Date().getHours()+new Date().getMinutes()/60,o=G(e,t);return s`
+      `;let t=new Date().getHours()+new Date().getMinutes()/60,n=j(e,t);return s`
       <div class="light-card">
         <div class="card-top">
           ${this._renderOrb(e,"full")}
@@ -345,57 +345,66 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
             <span class="event-name-headline">${e.currentEventName??"No active event"}</span>
             ${e.currentStart&&e.currentEnd?s`<span class="event-time-range"
                   >${e.currentStart}&ndash;${e.currentEnd}</span
-                >`:h}
+                >`:u}
           </div>
           ${e.forceWhiteEntityId?s`<button
                 class="force-white-btn"
                 @click=${()=>this._pressButton(e.forceWhiteEntityId)}
               >
                 Force White
-              </button>`:h}
+              </button>`:u}
         </div>
         ${e.segments.length>0?s`<div class="timeline-wrapper">
               <div class="timeline">
-                ${e.segments.map(i=>{let{leftPct:d,widthPct:f}=F(i.startTime,i.endTime),w=i.name===e.currentEventName;return s`<div
+                ${e.segments.map(i=>{let{leftPct:d,widthPct:v}=B(i.startTime,i.endTime),w=i.name===e.currentEventName;return s`<div
                     class="timeline-seg ${w?"current":""}"
-                    style="left:${d}%; width:${f}%; background:${i.colors[0]??"var(--cc-s2)"}"
+                    style="left:${d}%; width:${v}%; background:${i.colors[0]??"var(--cc-s2)"}"
                     title="${i.name} (${i.startTime}–${i.endTime})"
                   ></div>`})}
               </div>
               <div class="timeline-marks">
-                ${o.map(i=>s`
+                ${n.map(i=>s`
                     <div class="tl-mark" style="left:${i.leftPct}%">
                       <div class="tl-mark-line"></div>
-                      ${i.bare?h:s`<span class="tl-mark-lbl ${i.emphasize?"hl":""}"
+                      ${i.bare?u:s`<span class="tl-mark-lbl ${i.emphasize?"hl":""}"
                               >${i.label}</span
                             ><span class="tl-mark-lbl ${i.emphasize?"hl":""}">${i.time}</span>`}
                     </div>
                   `)}
               </div>
-            </div>`:h}
+            </div>
+            ${e.fadeOut!==null&&e.fadeOut>0?s`<div class="tl-fade-row">
+                  <span class="tl-fi-in"></span>
+                  <span class="tl-fi-out" title="Lights dim to off over this duration"
+                    >◂ ${O(e.fadeOut)} dim out</span
+                  >
+                </div>`:u}`:u}
         ${this._renderScheduleList(e,t)}
       </div>
-    `}_renderScheduleList(e,t){let o=E(t),i=(m,a)=>({kind:"point",label:m,time:a,done:o>=_(a)}),d=[];e.sunsetHour!==null&&d.push(i("Lights On",S(e.sunsetHour))),e.sunsetFadeEnabled&&e.sunsetHour!==null&&e.sunsetFadeOffsetMin!==null&&d.push(i("HA Fade-In Starts",S(e.sunsetHour-e.sunsetFadeOffsetMin/60)));let f=e.segments[0];f&&d.push(i("ChromaCal Colors Fire",f.startTime)),e.fadeIn!==null&&d.push({kind:"detail",label:"Color Fade-In",value:`${e.fadeIn}s`});for(let m of e.segments){let a=_(m.startTime),u=_(m.endTime);d.push({kind:"segment",label:m.name,time:`${m.startTime}\u2013${m.endTime}`,done:o>=u,active:o>=a&&o<u,color:m.colors[0]??null})}e.warmwhiteEnabled&&e.warmwhiteTime!==null&&d.push(i("Warm White",e.warmwhiteTime)),e.fadeOut!==null&&d.push({kind:"detail",label:"Dim Out",value:`${e.fadeOut}s`}),e.scheduleEndTime!==null&&d.push(i("Lights Off",e.scheduleEndTime)),d.push({kind:"detail",label:"Verify Off",value:e.verifyOffEnabled&&e.scheduleEndTime!==null?`Enabled \u2014 checks ${B(e.scheduleEndTime,30)}`:"Disabled"});let w=e.warmwhiteEnabled?N(t,e.warmwhiteTime):null,x=N(t,e.scheduleEndTime);return s`
+    `}_renderScheduleList(e,t){let n=E(t),i=(m,a)=>({kind:"point",label:m,time:a,done:n>=k(a)}),d=[];e.sunsetHour!==null&&d.push(i("Lights On",S(e.sunsetHour))),e.sunsetFadeEnabled&&e.sunsetHour!==null&&e.sunsetFadeOffsetMin!==null&&d.push(i("HA Fade-In Starts",S(e.sunsetHour-e.sunsetFadeOffsetMin/60)));let v=e.segments[0];v&&d.push(i("ChromaCal Colors Fire",v.startTime)),e.fadeIn!==null&&d.push({kind:"feature",label:"Color Fade-In",value:O(e.fadeIn),isOn:e.fadeIn>0});for(let m of e.segments){let a=k(m.startTime),h=k(m.endTime);d.push({kind:"segment",label:m.name,time:`${m.startTime}\u2013${m.endTime}`,done:n>=h,active:n>=a&&n<h,color:m.colors[0]??null})}e.warmwhiteEnabled&&e.warmwhiteTime!==null&&d.push(i("Warm White",e.warmwhiteTime)),d.push({kind:"feature",label:"Warm White",value:e.warmwhiteTime??"\u2014",isOn:e.warmwhiteEnabled}),e.fadeOut!==null&&d.push({kind:"feature",label:"Dim Out",value:O(e.fadeOut),isOn:e.fadeOut>0}),e.scheduleEndTime!==null&&d.push(i("Lights Off",e.scheduleEndTime)),d.push({kind:"feature",label:"Verify Off",value:e.scheduleEndTime!==null?G(e.scheduleEndTime,30):"\u2014",isOn:e.verifyOffEnabled});let w=e.warmwhiteEnabled?A(t,e.warmwhiteTime):null,x=A(t,e.scheduleEndTime);return s`
       <div class="schedule-list">
         ${e.overrideSource?s`<div class="schedule-override-banner">
-              ${oe[e.overrideSource]??e.overrideSource} active — overriding
+              ${ne[e.overrideSource]??e.overrideSource} active — overriding
               the schedule below
-            </div>`:h}
+            </div>`:u}
         ${w||x?s`<div class="schedule-countdowns">
-              ${w?s`<span>${w} until warm white</span>`:h}
-              ${x?s`<span>${x} until lights off</span>`:h}
-            </div>`:h}
+              ${w?s`<span>${w} until ${e.warmwhiteTime}</span>`:u}
+              ${x?s`<span>${x} until ${e.scheduleEndTime}</span>`:u}
+            </div>`:u}
         ${d.map(m=>this._renderScheduleRow(m))}
       </div>
-    `}_renderScheduleRow(e){if(e.kind==="detail")return s`<div class="sched-row sched-row-detail">
-        <span class="sched-row-label">${e.label}</span>
-        <span class="sched-row-value">${e.value}</span>
-      </div>`;let t=e.kind==="segment"&&e.active,o=e.done?"\u2713":t?"\u25B6":"\u25CB";return s`<div class="sched-row ${t?"active":""}">
-      <span class="sched-row-icon">${o}</span>
-      ${e.kind==="segment"&&e.color?s`<span class="sched-row-swatch" style="background:${e.color}"></span>`:h}
+    `}_renderScheduleRow(e){if(e.kind==="feature")return s`<div class="sched-row sched-feat">
+        <span class="sched-sep">──</span>
+        <span class="sched-feat-lbl">${e.label}</span>
+        <span class="sched-feat-val">${e.value}</span>
+        <span class="feat-tog ${e.isOn?"on":""}">${e.isOn?"ON":"OFF"}</span>
+      </div>`;let t=e.kind==="segment"&&e.active,n=e.done?"\u2705":t?"\u25B6":"\u25CB";return s`<div class="sched-row ${t?"active":""}">
+      <span class="sched-row-icon">${n}</span>
+      ${e.kind==="segment"&&e.color?s`<span class="sched-row-swatch" style="background:${e.color}"></span>`:u}
       <span class="sched-row-label">${e.label}</span>
       <span class="sched-row-time">${e.time}</span>
-    </div>`}};p.MAX_COLORS=6,p.styles=[P,W,M`
+      ${t?s`<span class="sched-now">◀ NOW</span>`:u}
+    </div>`}};p.MAX_COLORS=6,p.styles=[P,F,M`
       :host {
         display: block;
         font-family: var(--cc-font);
@@ -916,14 +925,85 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
         color: inherit;
       }
 
-      .sched-row-detail .sched-row-label {
-        color: var(--cc-muted);
+      /* "◀ NOW" tag on whichever row is currently active -- v1's
+         .sched-now, same green/weight/letter-spacing. */
+      .sched-now {
+        font-size: 10px;
+        color: var(--cc-green);
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        flex-shrink: 0;
       }
 
-      .sched-row-value {
-        color: var(--cc-text);
-        font-size: 12px;
+      /* Feature-toggle rows (Color Fade-In, Warm White, Dim Out, Verify
+         Off) -- v1's .sched-feat/.sched-sep/.sched-feat-lbl/.sched-feat-val/
+         .feat-tog, adapted onto --cc-* tokens. The pill is a static span,
+         not a button -- see ScheduleRow's docstring for why it isn't
+         clickable here. */
+      .sched-feat {
+        background: var(--cc-s2);
+        border-top: none !important;
+        padding: 4px 6px;
+      }
+
+      .sched-sep {
+        font-size: 11px;
+        color: var(--cc-muted);
+        width: 16px;
         flex-shrink: 0;
+        text-align: center;
+      }
+
+      .sched-feat-lbl {
+        flex: 1;
+        color: var(--cc-muted);
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .sched-feat-val {
+        font-size: 11px;
+        color: var(--cc-text);
+        font-family: monospace;
+        flex-shrink: 0;
+        opacity: 0.65;
+      }
+
+      .feat-tog {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        padding: 3px 10px;
+        border-radius: 10px;
+        flex-shrink: 0;
+        border: 1.5px solid var(--cc-border);
+        background: transparent;
+        color: var(--cc-muted);
+        min-width: 40px;
+        text-align: center;
+      }
+
+      .feat-tog.on {
+        border-color: var(--cc-green);
+        color: var(--cc-green);
+        background: color-mix(in srgb, var(--cc-green) 10%, transparent);
+      }
+
+      /* Dim-out annotation below the timeline bar -- v1's .tl-fade-row,
+         a plain two-column flex row (the empty .tl-fi-in slot is kept for
+         the same space-between layout v1 uses, even though v1 itself
+         never populates it either). */
+      .tl-fade-row {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        min-height: 20px;
+      }
+
+      .tl-fi-out {
+        font-size: 12px;
+        color: var(--cc-accent2);
+        font-weight: 500;
       }
 
       .upcoming-section {
@@ -1240,8 +1320,8 @@ import{a as M,b as s,c as h,d as H,e as R,f as T,g as y}from"./chunk-5VH4SVWE.js
       .card-content {
         padding: 0 16px 16px;
       }
-    `],b([T({attribute:!1})],p.prototype,"hass",2),b([T({type:Boolean})],p.prototype,"narrow",2),b([T({attribute:!1})],p.prototype,"panel",2),b([y()],p.prototype,"_themePreset",2),b([y()],p.prototype,"_skipFilter",2),b([y()],p.prototype,"_manageSkipsOpen",2),b([y()],p.prototype,"_controlsOpen",2),b([y()],p.prototype,"_houseViewOpen",2),b([y()],p.prototype,"_colorModalEvent",2),b([y()],p.prototype,"_colorModalColors",2),b([y()],p.prototype,"_colorModalPickerValue",2),b([y()],p.prototype,"_clockText",2),p=b([R("chromacal-panel")],p);var O=class extends p{constructor(){super(),this.narrow=!0}setConfig(c){}static getStubConfig(){return{}}getCardSize(){return this.hass?Math.max(1,$(this.hass).lights.length):1}getGridOptions(){return{rows:this.hass?Math.max(1,$(this.hass).lights.length):1,columns:6,min_rows:1}}render(){if(!this.hass)return h;let c=$(this.hass);return s`
+    `],f([T({attribute:!1})],p.prototype,"hass",2),f([T({type:Boolean})],p.prototype,"narrow",2),f([T({attribute:!1})],p.prototype,"panel",2),f([y()],p.prototype,"_themePreset",2),f([y()],p.prototype,"_skipFilter",2),f([y()],p.prototype,"_manageSkipsOpen",2),f([y()],p.prototype,"_controlsOpen",2),f([y()],p.prototype,"_houseViewOpen",2),f([y()],p.prototype,"_colorModalEvent",2),f([y()],p.prototype,"_colorModalColors",2),f([y()],p.prototype,"_colorModalPickerValue",2),f([y()],p.prototype,"_clockText",2),p=f([z("chromacal-panel")],p);var C=class extends p{constructor(){super(),this.narrow=!0}setConfig(c){}static getStubConfig(){return{}}getCardSize(){return this.hass?Math.max(1,$(this.hass).lights.length):1}getGridOptions(){return{rows:this.hass?Math.max(1,$(this.hass).lights.length):1,columns:6,min_rows:1}}render(){if(!this.hass)return u;let c=$(this.hass);return s`
       <ha-card header="ChromaCal">
         <div class="card-content">${this._renderLightGrid(c)}</div>
       </ha-card>
-    `}};O=b([R("chromacal-card")],O);window.customCards=window.customCards||[];window.customCards.push({type:"chromacal-card",name:"ChromaCal",description:"Compact status for your ChromaCal lights."});export{O as ChromaCalCard,p as ChromaCalPanel};
+    `}};C=f([z("chromacal-card")],C);window.customCards=window.customCards||[];window.customCards.push({type:"chromacal-card",name:"ChromaCal",description:"Compact status for your ChromaCal lights."});export{C as ChromaCalCard,p as ChromaCalPanel};

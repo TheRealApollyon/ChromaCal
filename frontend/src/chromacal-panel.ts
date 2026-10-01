@@ -14,6 +14,7 @@ import {
   addMinutesToHHMM,
   buildTimelineMarks,
   formatCountdown,
+  formatFadeSeconds,
   formatHour,
   hhmmToWindowMinutes,
   hourToWindowMinutes,
@@ -30,15 +31,18 @@ const SPINNING_COLOR_THRESHOLD = 5;
  * "point" is a single moment (done/upcoming only, no "active" state --
  * matches v1's schedRow() for non-range markers); "segment" is a real
  * night-segment with a start/end range, so it can be currently active,
- * not just done/upcoming; "detail" is a plain label/value row with no
- * done/active concept at all (Color Fade-In, Dim Out, Verify Off --
- * config values, not schedule events). Read-only display this pass, no
- * inline editing -- see coordinator.py's LightConfig for where these
- * values actually come from. */
+ * not just done/upcoming; "feature" is v1's featRow() -- a config value
+ * with its own on/off pill (Color Fade-In, Warm White, Dim Out, Verify
+ * Off), independent of done/active since these aren't schedule events.
+ * Read-only display this pass, no inline editing -- the pill reflects
+ * real config state but isn't clickable like v1's own (which called
+ * toggleNightFeature() directly; this project's settings live in the
+ * config flow instead). See coordinator.py's LightConfig for where
+ * these values actually come from. */
 type ScheduleRow =
   | { kind: "point"; label: string; time: string; done: boolean }
   | { kind: "segment"; label: string; time: string; done: boolean; active: boolean; color: string | null }
-  | { kind: "detail"; label: string; value: string };
+  | { kind: "feature"; label: string; value: string; isOn: boolean };
 
 /** coordinator.py's ManualOverride source tags -- see
  * _OVERRIDE_SOURCE_FORCE_WHITE/_SALUTE/_EMERGENCY. */
@@ -637,7 +641,15 @@ export class ChromaCalPanel extends LitElement {
                   `,
                 )}
               </div>
-            </div>`
+            </div>
+            ${light.fadeOut !== null && light.fadeOut > 0
+              ? html`<div class="tl-fade-row">
+                  <span class="tl-fi-in"></span>
+                  <span class="tl-fi-out" title="Lights dim to off over this duration"
+                    >◂ ${formatFadeSeconds(light.fadeOut)} dim out</span
+                  >
+                </div>`
+              : nothing}`
           : nothing}
         ${this._renderScheduleList(light, nowHour)}
       </div>
@@ -671,8 +683,15 @@ export class ChromaCalPanel extends LitElement {
     if (firstSegment) {
       rows.push(point("ChromaCal Colors Fire", firstSegment.startTime));
     }
+    // Feature-toggle rows (v1's featRow()): a config value with its own
+    // on/off pill, independent of the schedule-event rows above/below.
     if (light.fadeIn !== null) {
-      rows.push({ kind: "detail", label: "Color Fade-In", value: `${light.fadeIn}s` });
+      rows.push({
+        kind: "feature",
+        label: "Color Fade-In",
+        value: formatFadeSeconds(light.fadeIn),
+        isOn: light.fadeIn > 0,
+      });
     }
     for (const segment of light.segments) {
       const startWin = hhmmToWindowMinutes(segment.startTime);
@@ -689,19 +708,40 @@ export class ChromaCalPanel extends LitElement {
     if (light.warmwhiteEnabled && light.warmwhiteTime !== null) {
       rows.push(point("Warm White", light.warmwhiteTime));
     }
+    // Always shown, unlike the point row above which only appears when
+    // enabled -- matches v1's own featRow() for Warm White, which renders
+    // unconditionally right after its conditional schedRow(). v1's own
+    // label is Kelvin-descriptive ("Warm White (2700K)"); that value isn't
+    // exposed by the backend yet (warmwhite_kelvin_mireds has no config
+    // flow field -- same reason it was already left out of this list
+    // entirely in an earlier pass), so this stays a plain "Warm White"
+    // rather than fabricate a Kelvin reading nothing configures.
+    rows.push({
+      kind: "feature",
+      label: "Warm White",
+      value: light.warmwhiteTime ?? "—",
+      isOn: light.warmwhiteEnabled,
+    });
     if (light.fadeOut !== null) {
-      rows.push({ kind: "detail", label: "Dim Out", value: `${light.fadeOut}s` });
+      rows.push({
+        kind: "feature",
+        label: "Dim Out",
+        value: formatFadeSeconds(light.fadeOut),
+        isOn: light.fadeOut > 0,
+      });
     }
     if (light.scheduleEndTime !== null) {
       rows.push(point("Lights Off", light.scheduleEndTime));
     }
+    // Value is always the computed check time (matches v1's verifyStr =
+    // fmtH(cfgEnd + 0.5)), independent of the isOn pill -- previously this
+    // folded enabled-state into the value text itself ("Enabled -- checks
+    // HH:MM" / "Disabled"), unlike every other feature row.
     rows.push({
-      kind: "detail",
+      kind: "feature",
       label: "Verify Off",
-      value:
-        light.verifyOffEnabled && light.scheduleEndTime !== null
-          ? `Enabled — checks ${addMinutesToHHMM(light.scheduleEndTime, 30)}`
-          : "Disabled",
+      value: light.scheduleEndTime !== null ? addMinutesToHHMM(light.scheduleEndTime, 30) : "—",
+      isOn: light.verifyOffEnabled,
     });
 
     const untilWarm = light.warmwhiteEnabled ? formatCountdown(nowHour, light.warmwhiteTime) : null;
@@ -717,8 +757,8 @@ export class ChromaCalPanel extends LitElement {
           : nothing}
         ${untilWarm || untilOff
           ? html`<div class="schedule-countdowns">
-              ${untilWarm ? html`<span>${untilWarm} until warm white</span>` : nothing}
-              ${untilOff ? html`<span>${untilOff} until lights off</span>` : nothing}
+              ${untilWarm ? html`<span>${untilWarm} until ${light.warmwhiteTime}</span>` : nothing}
+              ${untilOff ? html`<span>${untilOff} until ${light.scheduleEndTime}</span>` : nothing}
             </div>`
           : nothing}
         ${rows.map((row) => this._renderScheduleRow(row))}
@@ -727,14 +767,19 @@ export class ChromaCalPanel extends LitElement {
   }
 
   private _renderScheduleRow(row: ScheduleRow) {
-    if (row.kind === "detail") {
-      return html`<div class="sched-row sched-row-detail">
-        <span class="sched-row-label">${row.label}</span>
-        <span class="sched-row-value">${row.value}</span>
+    if (row.kind === "feature") {
+      // v1's featRow(): a "──" separator, label, current value, and an
+      // on/off pill -- not clickable here (see ScheduleRow's docstring).
+      return html`<div class="sched-row sched-feat">
+        <span class="sched-sep">──</span>
+        <span class="sched-feat-lbl">${row.label}</span>
+        <span class="sched-feat-val">${row.value}</span>
+        <span class="feat-tog ${row.isOn ? "on" : ""}">${row.isOn ? "ON" : "OFF"}</span>
       </div>`;
     }
     const active = row.kind === "segment" && row.active;
-    const icon = row.done ? "✓" : active ? "▶" : "○";
+    // ✅, not a bare "✓" -- matches v1's schedRow() exactly.
+    const icon = row.done ? "✅" : active ? "▶" : "○";
     return html`<div class="sched-row ${active ? "active" : ""}">
       <span class="sched-row-icon">${icon}</span>
       ${row.kind === "segment" && row.color
@@ -742,6 +787,7 @@ export class ChromaCalPanel extends LitElement {
         : nothing}
       <span class="sched-row-label">${row.label}</span>
       <span class="sched-row-time">${row.time}</span>
+      ${active ? html`<span class="sched-now">◀ NOW</span>` : nothing}
     </div>`;
   }
 
@@ -1269,14 +1315,85 @@ export class ChromaCalPanel extends LitElement {
         color: inherit;
       }
 
-      .sched-row-detail .sched-row-label {
-        color: var(--cc-muted);
+      /* "◀ NOW" tag on whichever row is currently active -- v1's
+         .sched-now, same green/weight/letter-spacing. */
+      .sched-now {
+        font-size: 10px;
+        color: var(--cc-green);
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        flex-shrink: 0;
       }
 
-      .sched-row-value {
-        color: var(--cc-text);
-        font-size: 12px;
+      /* Feature-toggle rows (Color Fade-In, Warm White, Dim Out, Verify
+         Off) -- v1's .sched-feat/.sched-sep/.sched-feat-lbl/.sched-feat-val/
+         .feat-tog, adapted onto --cc-* tokens. The pill is a static span,
+         not a button -- see ScheduleRow's docstring for why it isn't
+         clickable here. */
+      .sched-feat {
+        background: var(--cc-s2);
+        border-top: none !important;
+        padding: 4px 6px;
+      }
+
+      .sched-sep {
+        font-size: 11px;
+        color: var(--cc-muted);
+        width: 16px;
         flex-shrink: 0;
+        text-align: center;
+      }
+
+      .sched-feat-lbl {
+        flex: 1;
+        color: var(--cc-muted);
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .sched-feat-val {
+        font-size: 11px;
+        color: var(--cc-text);
+        font-family: monospace;
+        flex-shrink: 0;
+        opacity: 0.65;
+      }
+
+      .feat-tog {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        padding: 3px 10px;
+        border-radius: 10px;
+        flex-shrink: 0;
+        border: 1.5px solid var(--cc-border);
+        background: transparent;
+        color: var(--cc-muted);
+        min-width: 40px;
+        text-align: center;
+      }
+
+      .feat-tog.on {
+        border-color: var(--cc-green);
+        color: var(--cc-green);
+        background: color-mix(in srgb, var(--cc-green) 10%, transparent);
+      }
+
+      /* Dim-out annotation below the timeline bar -- v1's .tl-fade-row,
+         a plain two-column flex row (the empty .tl-fi-in slot is kept for
+         the same space-between layout v1 uses, even though v1 itself
+         never populates it either). */
+      .tl-fade-row {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6px;
+        min-height: 20px;
+      }
+
+      .tl-fi-out {
+        font-size: 12px;
+        color: var(--cc-accent2);
+        font-weight: 500;
       }
 
       .upcoming-section {

@@ -74,6 +74,20 @@ export function addMinutesToHHMM(hhmm: string, minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** Ports v1's fmtFade()/fmtFS() -- "2m 5s", "2m", "45s" -- for the Color
+ * Fade-In/Dim Out feature rows and the dim-out bar annotation. One
+ * deliberate deviation from v1: this returns "0s" honestly for a real
+ * configured 0 rather than v1's `fmtFade(0) || '30s'` fallback, which
+ * silently relabeled an explicit "no fade" as its unrelated 30s default
+ * at the call site -- this project's fade_in/fade_out are always real
+ * resolved values by the time they reach the frontend, never missing. */
+export function formatFadeSeconds(seconds: number): string {
+  if (seconds <= 0) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m${s > 0 ? ` ${s}s` : ""}` : `${s}s`;
+}
+
 export interface TimelineMark {
   label: string;
   time: string;
